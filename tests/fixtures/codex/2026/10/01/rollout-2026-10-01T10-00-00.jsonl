@@ -1,0 +1,5 @@
+{"timestamp":"2026-10-01T10:00:00.000Z","type":"session_meta","payload":{"id":"rollout-1","cwd":"/home/x/webapp","cli_version":"0.1.0"}}
+{"timestamp":"2026-10-01T10:00:01.000Z","type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"add auth"}]}}
+{"timestamp":"2026-10-01T10:00:05.000Z","type":"response_item","payload":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"Adding JWT"}]}}
+{"timestamp":"2026-10-01T10:00:06.000Z","type":"response_item","payload":{"type":"function_call","name":"shell","arguments":"{\"command\":[\"ls\"]}"}}
+{"timestamp":"2026-10-01T10:00:07.000Z","type":"response_item","payload":{"type":"function_call_output","output":"src test"}}

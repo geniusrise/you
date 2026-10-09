@@ -11,6 +11,7 @@ pub trait Adapter {
     fn read(&self, key: &str) -> anyhow::Result<(crate::model::SessionMeta, Vec<crate::model::Msg>)>;
 }
 
+#[derive(Debug)]
 pub struct DiscoveredSession {
     pub key: String,
     pub fingerprint: u64,

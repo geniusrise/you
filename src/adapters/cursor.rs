@@ -43,7 +43,7 @@ impl Cursor {
         out
     }
 
-    pub(crate) fn open(db: &PathBuf) -> Option<rusqlite::Connection> {
+    pub(crate) fn open(db: &std::path::Path) -> Option<rusqlite::Connection> {
         rusqlite::Connection::open_with_flags(
             db,
             OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX,
@@ -51,7 +51,7 @@ impl Cursor {
         .ok()
     }
 
-    pub(crate) fn fingerprint(db: &PathBuf) -> u64 {
+    pub(crate) fn fingerprint(db: &std::path::Path) -> u64 {
         db.metadata()
             .ok()
             .and_then(|m| m.modified().ok())

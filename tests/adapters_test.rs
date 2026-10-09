@@ -48,7 +48,7 @@ fn claude_code_syncs_into_store() {
     st.init().unwrap();
     let mut cfg = aiyou::config::Config::default();
     cfg.sources.claude_dir = Some(project_fixture());
-    cfg.sources.enabled = Some(vec!["claude-code".into()];
+    cfg.sources.enabled = Some(vec!["claude-code".into()]);
     let r = aiyou::sync::run(&st, &cfg, None).unwrap();
     assert_eq!(r.per_source, vec![("claude-code".to_string(), 1, 0, 0)]);
     let (meta, msgs) = st.read_session_jsonl("claude-code", "session-a").unwrap();

@@ -1,0 +1,30 @@
+[package]
+name = "aiyou"
+version = "0.1.0"
+edition = "2021"
+description = "Export, maintain and analyze all your AI coding-agent chat history in one git-versioned store"
+license = "MIT"
+
+[dependencies]
+anyhow = "1"
+clap = { version = "4", features = ["derive"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+toml = "0.8"
+sha2 = "0.10"
+hex = "0.4"
+chrono = { version = "0.4", features = ["serde"] }
+regex = "1"
+rusqlite = { version = "0.31", features = ["bundled"] }
+tokio = { version = "1", features = ["full"] }
+reqwest = { version = "0.12", features = ["json", "blocking"] }
+zip = "2"
+tempfile = "3"
+walkdir = "2"
+
+[dev-dependencies]
+axum = "0.7"
+
+[profile.release]
+lto = true
+strip = true

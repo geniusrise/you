@@ -112,6 +112,8 @@ Implement the three-method `Adapter` trait in `src/adapters/` (`name`, `discover
 
 ## Development
 
+See [FEATURES.md](FEATURES.md) for the roadmap (near-term: integrations only) and [AGENTS-MAINTENANCE.md](AGENTS-MAINTENANCE.md) for the maintenance guide.
+
 ```bash
 cargo test          # full suite: adapters, importers, pipeline, e2e (mock LLM, no network)
 cargo clippy -- -D warnings

@@ -1,0 +1,15 @@
+Package: aiyou
+Version: REPLACE_VERSION
+Section: utils
+Priority: optional
+Architecture: REPLACE_ARCH
+Depends: git
+Maintainer: ixaxaar <https://aur.archlinux.org/account/ixaxaar/>
+Homepage: https://github.com/geniusrise/you
+Description: Export, maintain and analyze all your AI coding-agent chat history
+ Export, maintain and analyze all your AI coding-agent chat history —
+ Claude Code, OpenCode, Codex, Charm Crush, Gemini CLI, Pi, Antigravity,
+ Goose, Copilot, Cursor, Amp, Continue, Zed and more — in one normalized,
+ git-versioned store on disk. Import ChatGPT, Claude.ai and Gemini dumps
+ alongside them, then run an LLM swarm over everything to distill your
+ personality, preferences and workflow into a portable SKILL.md.

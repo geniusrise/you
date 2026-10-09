@@ -1,5 +1,7 @@
 # aiyou
 
+**https://geniusrise.github.io/you**
+
 Export, maintain and analyze **all** your AI coding-agent chat history — Claude Code, OpenCode, Codex, Charm Crush, Gemini CLI, Pi — in one normalized, **git-versioned store** on disk. Import your ChatGPT / Claude.ai / Gemini dumps alongside them. Then run an LLM **swarm** over everything to distill your personality, preferences and workflow into a portable `SKILL.md` your agents can use to align with you.
 
 Local-first: the store is a plain git repo under `~/.aiyou`. No daemon, no server, no network — except when *you* run `aiyou profile`.
@@ -7,7 +9,18 @@ Local-first: the store is a plain git repo under `~/.aiyou`. No daemon, no serve
 ## Install
 
 ```bash
-cargo install --path .
+# Arch / Manjaro (AUR)
+yay -S aiyou
+
+# Debian / Ubuntu
+sudo dpkg -i aiyou_0.2.0_amd64.deb   # from GitHub releases
+
+# Fedora / RHEL
+sudo dnf install aiyou-0.2.0-1.x86_64.rpm
+
+# From source
+cargo install --git https://github.com/geniusrise/you
+# shell completions: aiyou --shell bash|zsh|fish
 ```
 
 ## Quickstart
@@ -63,7 +76,7 @@ Add a git remote in `~/.aiyou` yourself if you want off-machine backups — aiyo
 
 | Harvest (read from disk) | Import (from dumps) |
 | --- | --- |
-| Claude Code (`~/.claude/projects`), OpenCode (SQLite + storage), Codex (`~/.codex/sessions`), Charm Crush, Gemini CLI (`~/.gemini`), Pi (`~/.pi`) | ChatGPT (`conversations.json` / .zip), Claude.ai (`conversations.json`), Gemini (Takeout JSON) |
+| Claude Code, OpenCode, Codex, Charm Crush, Gemini CLI, Pi, Antigravity, Goose, GitHub Copilot (CLI + VS Code chat), Cursor, Amp, Continue, Zed | ChatGPT (`conversations.json` / .zip), Claude.ai (`conversations.json`), Gemini (Takeout JSON) |
 
 Missing a source (e.g. you don't use Codex)? It's skipped with no errors. Paths are overridable in `aiyou.toml`.
 

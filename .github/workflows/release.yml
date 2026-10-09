@@ -1,0 +1,151 @@
+name: release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.vars.outputs.version }}
+      tag_sha256: ${{ steps.vars.outputs.tag_sha256 }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: build
+        run: cargo build --release --locked
+      - name: strip
+        run: strip target/release/aiyou
+      - id: vars
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          TAG_TARBALL_SHA=$(curl -sL "https://github.com/${GITHUB_REPOSITORY}/archive/refs/tags/${GITHUB_REF_NAME}.tar.gz" | sha256sum | cut -d' ' -f1)
+          echo "tag_sha256=$TAG_TARBALL_SHA" >> "$GITHUB_OUTPUT"
+      - name: completions
+        run: |
+          mkdir -p dist/completions
+          target/release/aiyou --shell bash > dist/completions/aiyou.bash
+          target/release/aiyou --shell zsh  > dist/completions/_aiyou
+          target/release/aiyou --shell fish > dist/completions/aiyou.fish
+      - name: tarball
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          mkdir -p dist/aiyou
+          cp target/release/aiyou dist/completions/aiyou.bash dist/completions/_aiyou dist/completions/aiyou.fish dist/aiyou/
+          cp README.md LICENSE dist/aiyou/
+          tar -czf "dist/aiyou-${VERSION}-x86_64-linux.tar.gz" -C dist aiyou
+      - name: deb
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          ARCH=$(dpkg --print-architecture)
+          mkdir -p "dist/deb-root/DEBIAN" "dist/deb-root/usr/bin" \
+                   "dist/deb-root/usr/share/doc/aiyou" \
+                   "dist/deb-root/usr/share/bash-completion/completions" \
+                   "dist/deb-root/usr/share/zsh/site-functions" \
+                   "dist/deb-root/usr/share/fish/vendor_completions.d"
+          sed -e "s/REPLACE_VERSION/${VERSION}/" -e "s/REPLACE_ARCH/${ARCH}/" packaging/deb/control > dist/deb-root/DEBIAN/control
+          cp target/release/aiyou dist/deb-root/usr/bin/aiyou
+          cp README.md LICENSE dist/deb-root/usr/share/doc/aiyou/
+          cp dist/completions/aiyou.bash dist/deb-root/usr/share/bash-completion/completions/aiyou
+          cp dist/completions/_aiyou dist/deb-root/usr/share/zsh/site-functions/_aiyou
+          cp dist/completions/aiyou.fish dist/deb-root/usr/share/fish/vendor_completions.d/aiyou.fish
+          dpkg-deb --build --root-owner-group dist/deb-root "dist/aiyou_${VERSION}_${ARCH}.deb"
+      - name: rpm
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          sudo apt-get update -q && sudo apt-get install -y rpm
+          mkdir -p dist/rpmbuild/{BUILD,RPMS,SOURCES,SPECS,SRPMS}
+          sed -e "s/REPLACE_VERSION/${VERSION}/" -e "s/REPLACE_ARCH/x86_64/" packaging/rpm/aiyou.spec > dist/rpmbuild/SPECS/aiyou.spec
+          mkdir -p dist/rpmsrc/aiyou-binary
+          cp target/release/aiyou dist/rpmsrc/aiyou-binary/
+          cp README.md LICENSE dist/rpmsrc/aiyou-binary/
+          cp dist/completions/aiyou.bash dist/rpmsrc/aiyou-binary/aiyou.bash
+          cp dist/completions/_aiyou dist/rpmsrc/aiyou-binary/_aiyou
+          cp dist/completions/aiyou.fish dist/rpmsrc/aiyou-binary/aiyou.fish
+          tar -czf dist/rpmbuild/SOURCES/aiyou-1.tar.gz -C dist/rpmsrc aiyou-binary
+          rpmbuild -bb --define "_topdir ${PWD}/dist/rpmbuild" dist/rpmbuild/SPECS/aiyou.spec
+          mv dist/rpmbuild/RPMS/*/aiyou-*.rpm dist/
+      - name: upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: packages
+          path: |
+            dist/*.tar.gz
+            dist/*.deb
+            dist/*.rpm
+      - name: github release
+        run: |
+          gh release create "$GITHUB_REF_NAME" dist/*.tar.gz dist/*.deb dist/*.rpm \
+            --title "aiyou ${GITHUB_REF_NAME}" \
+            --generate-notes
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  aur:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: push to AUR
+        env:
+          AUR_SSH_KEY: ${{ secrets.AUR_SSH_KEY }}
+          VERSION: ${{ needs.build.outputs.version }}
+          TAG_SHA256: ${{ needs.build.outputs.tag_sha256 }}
+        if: env.AUR_SSH_KEY != ''
+        run: |
+          set -euo pipefail
+          VERSION="${GITHUB_REF_NAME#v}"
+          mkdir -p ~/.ssh
+          printf '%s\n' "$AUR_SSH_KEY" > ~/.ssh/aur_key
+          chmod 600 ~/.ssh/aur_key
+          echo "Host aur.archlinux.org" >> ~/.ssh/config
+          echo "  IdentityFile ~/.ssh/aur_key" >> ~/.ssh/config
+          echo "  User aur" >> ~/.ssh/config
+          ssh-keyscan -t ed25519 aur.archlinux.org >> ~/.ssh/known_hosts
+          export GIT_SSH_COMMAND="ssh -i ~/.ssh/aur_key -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no"
+          rm -rf aur && mkdir aur && cd aur
+          git init -q .
+          git config user.name "ixaxaar"
+          git config user.email "ixaxaar@users.noreply.github.com"
+          sed -e "s/^pkgver=.*/pkgver=${VERSION}/" \
+              -e "s/sha256sums=('SKIP')/sha256sums=('${TAG_SHA256}')/" \
+              ../packaging/aur/PKGBUILD > PKGBUILD
+          # SRCINFO without makepkg on ubuntu: no pacman; write .SRCINFO manually
+          python3 - <<'PY'
+          import re
+          src = open('PKGBUILD').read()
+          def val(k):
+              m = re.search(rf'^{k}=(.*)$', src, re.M)
+              if not m: raise SystemExit(f"missing {k}")
+              v = m.group(1).strip().strip('\'"')
+              # split arrays
+              parts = [p.strip().strip('\'"') for p in v.strip('()').split()] if v.startswith('(') else [v]
+              return parts
+          lines = ["pkgbase = aiyou"]
+          for k in ["pkgver", "pkgrel", "epoch", "pkgdesc", "url"]:
+              try:
+                  for v in val(k): lines.append(f"\t{k} = {v}")
+              except SystemExit: pass
+          lines += ["\tpackager = ixaxaar <https://aur.archlinux.org/account/ixaxaar/>"]
+          for v in val("arch"): lines.append(f"\tarch = {v}")
+          for l in ["MIT"]: lines.append(f"\tlicense = {l}")
+          for d in ["gcc-libs", "git"]: lines.append(f"\tdepends = {d}")
+          for d in ["cargo"]: lines.append(f"\tmakedepends = {d}")
+          for s in val("source"): lines.append(f"\tsource = {s}")
+          for s in val("sha256sums"): lines.append(f"\tsha256sum = {s}")
+          lines += ["pkgname = aiyou"]
+          open('.SRCINFO','w').write("\n".join(lines) + "\n")
+          PY
+          git add PKGBUILD .SRCINFO
+          git commit -q -m "aiyou ${VERSION}"
+          git push -q "ssh://aur@aur.archlinux.org/aiyou.git" HEAD:master
+EOF

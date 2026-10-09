@@ -22,8 +22,12 @@ pub struct Cli {
     #[arg(long, global = true)]
     pub root: Option<std::path::PathBuf>,
 
+    /// Print shell completions for the given shell and exit
+    #[arg(long, global = true)]
+    pub shell: Option<clap_complete::Shell>,
+
     #[command(subcommand)]
-    pub cmd: Cmd,
+    pub cmd: Option<Cmd>,
 }
 
 #[derive(Subcommand)]

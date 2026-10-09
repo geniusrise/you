@@ -1,6 +1,6 @@
 [package]
 name = "aiyou"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 description = "Export, maintain and analyze all your AI coding-agent chat history in one git-versioned store"
 license = "MIT"
@@ -8,6 +8,7 @@ license = "MIT"
 [dependencies]
 anyhow = "1"
 clap = { version = "4", features = ["derive"] }
+clap_complete = "4"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 toml = "0.8"

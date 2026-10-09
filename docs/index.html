@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>aiyou — all your AI chat history, in one git repo</title>
+<meta name="description" content="Export, maintain and analyze all your AI coding-agent chat history in one git-versioned store. Import ChatGPT, Claude and Gemini dumps. Distill your personality into a skill your agents can use.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🫵</text></svg>">
+<style>
+  :root {
+    --bg: #07070b;
+    --fg: #e8e8f0;
+    --dim: #9a9ab0;
+    --accent: #7c6cff;
+    --accent2: #2fd4c9;
+    --pink: #ff6ec7;
+    --card: rgba(255,255,255,.04);
+    --stroke: rgba(255,255,255,.09);
+    --mono: ui-monospace, "JetBrains Mono", "Cascadia Code", Menlo, Consolas, monospace;
+    --sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+  body {
+    background: var(--bg); color: var(--fg); font-family: var(--sans);
+    line-height: 1.6; overflow-x: hidden;
+  }
+  /* animated aurora backdrop */
+  .aurora { position: fixed; inset: -40%; z-index: -1; filter: blur(120px); opacity: .5; pointer-events: none; }
+  .aurora span { position: absolute; border-radius: 50%; mix-blend-mode: screen; animation: drift 26s ease-in-out infinite alternate; }
+  .aurora span:nth-child(1) { width: 55vmax; height: 55vmax; left: -10%; top: -15%; background: var(--accent); }
+  .aurora span:nth-child(2) { width: 45vmax; height: 45vmax; right: -12%; top: 10%; background: var(--accent2); animation-delay: -8s; }
+  .aurora span:nth-child(3) { width: 40vmax; height: 40vmax; left: 25%; bottom: -20%; background: var(--pink); animation-delay: -16s; }
+  @keyframes drift { from { transform: translate(0,0) scale(1); } to { transform: translate(9vmax,7vmax) scale(1.25); } }
+
+  .wrap { max-width: 1040px; margin: 0 auto; padding: 0 24px; }
+
+  nav { position: sticky; top: 0; z-index: 10; backdrop-filter: blur(14px);
+    background: rgba(7,7,11,.6); border-bottom: 1px solid var(--stroke); }
+  nav .wrap { display: flex; align-items: center; justify-content: space-between; height: 60px; }
+  .logo { font-family: var(--mono); font-weight: 700; letter-spacing: -.03em; text-decoration: none; color: var(--fg); }
+  .logo b { color: var(--accent2); }
+  nav a.nav-link { color: var(--dim); text-decoration: none; font-size: .9rem; margin-left: 22px; transition: color .2s; }
+  nav a.nav-link:hover { color: var(--fg); }
+
+  header { padding: 110px 0 90px; text-align: center; }
+  .pill { display: inline-block; font-family: var(--mono); font-size: .78rem; color: var(--accent2);
+    border: 1px solid color-mix(in srgb, var(--accent2) 40%, transparent); border-radius: 999px;
+    padding: 5px 14px; margin-bottom: 26px; background: color-mix(in srgb, var(--accent2) 8%, transparent); }
+  h1 { font-size: clamp(2.6rem, 7vw, 4.6rem); line-height: 1.05; letter-spacing: -.035em; font-weight: 800; }
+  h1 em { font-style: normal; background: linear-gradient(92deg, var(--accent), var(--pink) 50%, var(--accent2));
+    -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
+  .tagline { color: var(--dim); max-width: 620px; margin: 22px auto 40px; font-size: 1.13rem; }
+  .cta { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; }
+  .btn { display: inline-block; padding: 13px 26px; border-radius: 12px; text-decoration: none; font-weight: 600;
+    transition: transform .18s, box-shadow .18s, border-color .18s; font-size: .95rem; }
+  .btn:hover { transform: translateY(-2px); }
+  .btn-primary { background: linear-gradient(92deg, var(--accent), var(--pink)); color: #fff;
+    box-shadow: 0 8px 34px color-mix(in srgb, var(--accent) 45%, transparent); }
+  .btn-ghost { border: 1px solid var(--stroke); color: var(--fg); background: var(--card); }
+  .btn-ghost:hover { border-color: var(--accent); }
+
+  section { padding: 46px 0; }
+  h2 { font-size: clamp(1.5rem, 3.6vw, 2.2rem); letter-spacing: -.025em; margin-bottom: 8px; }
+  .sub { color: var(--dim); margin-bottom: 34px; max-width: 640px; }
+
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 18px; }
+  .card { background: var(--card); border: 1px solid var(--stroke); border-radius: 18px; padding: 26px;
+    transition: border-color .25s, transform .25s; }
+  .card:hover { border-color: color-mix(in srgb, var(--accent) 55%, transparent); transform: translateY(-3px); }
+  .card h3 { font-size: 1.06rem; margin: 14px 0 8px; letter-spacing: -.01em; }
+  .card p { color: var(--dim); font-size: .93rem; }
+  .card .ico { font-size: 1.5rem; }
+
+  .chips { display: flex; flex-wrap: wrap; gap: 9px; }
+  .chip { font-family: var(--mono); font-size: .8rem; padding: 6px 13px; border-radius: 999px;
+    background: var(--card); border: 1px solid var(--stroke); color: var(--dim); transition: all .2s; }
+  .chip:hover { color: var(--fg); border-color: var(--accent2); }
+  .chip.on { color: var(--accent2); border-color: color-mix(in srgb, var(--accent2) 45%, transparent); }
+  .chip.new { color: var(--pink); border-color: color-mix(in srgb, var(--pink) 45%, transparent); }
+
+  pre { background: #0b0b13; border: 1px solid var(--stroke); border-radius: 14px; padding: 22px;
+    overflow-x: auto; font-family: var(--mono); font-size: .87rem; line-height: 1.75; margin: 0; }
+  pre .c { color: #5c5c78; }
+  pre .p { color: var(--accent2); }
+  pre .a { color: var(--pink); }
+  .codewrap { position: relative; }
+  .codewrap .label { position: absolute; top: 12px; right: 14px; font-family: var(--mono);
+    font-size: .68rem; color: var(--dim); letter-spacing: .08em; }
+
+  .steps { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 18px; counter-reset: step; }
+  .step { position: relative; background: var(--card); border: 1px solid var(--stroke); border-radius: 18px; padding: 26px 26px 22px; }
+  .step::before { counter-increment: step; content: counter(step, decimal-leading-zero);
+    position: absolute; top: -14px; left: 22px; font-family: var(--mono); font-weight: 700;
+    color: #07070b; background: linear-gradient(92deg, var(--accent2), var(--accent));
+    border-radius: 8px; padding: 2px 10px; font-size: .85rem; }
+  .step p { color: var(--dim); font-size: .92rem; }
+  .step code { font-family: var(--mono); color: var(--accent2); font-size: .85em; background: rgba(255,255,255,.05); padding: 1px 6px; border-radius: 6px; }
+
+  footer { border-top: 1px solid var(--stroke); margin-top: 70px; padding: 36px 0 48px; color: var(--dim);
+    font-size: .85rem; display: flex; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
+  footer a { color: var(--fg); text-decoration: none; }
+  footer a:hover { color: var(--accent2); }
+
+  @media (max-width: 640px) {
+    header { padding: 70px 0 50px; }
+    nav a.nav-link { display: none; }
+  }
+</style>
+</head>
+<body>
+<div class="aurora"><span></span><span></span><span></span></div>
+
+<nav>
+  <div class="wrap">
+    <a class="logo" href="#">ai<b>you</b></a>
+    <div>
+      <a class="nav-link" href="#features">features</a>
+      <a class="nav-link" href="#sources">sources</a>
+      <a class="nav-link" href="#install">install</a>
+      <a class="nav-link" href="https://github.com/geniusrise/you">github</a>
+    </div>
+  </div>
+</nav>
+
+<header class="wrap">
+  <span class="pill">v0.2.0 — 16 harnesses · local-first · git-versioned</span>
+  <h1>Every AI chat you've<br>ever had, <em>in one place.</em></h1>
+  <p class="tagline">
+    aiyou harvests your Claude Code, OpenCode, Codex, Copilot, Cursor and friends into one
+    normalized, git-versioned store — imports your ChatGPT &amp; Gemini dumps — then runs an
+    LLM swarm over everything to write a <b>SKILL.md</b> that makes every agent align with
+    <i>you</i>.
+  </p>
+  <div class="cta">
+    <a class="btn btn-primary" href="#install">Get started</a>
+    <a class="btn btn-ghost" href="https://github.com/geniusrise/you">★ on GitHub</a>
+  </div>
+</header>
+
+<section id="features" class="wrap">
+  <h2>One store. Zero lock-in.</h2>
+  <p class="sub">Your agents' data lives in a dozen opaque SQLite files and JSONL dumps. aiyou turns all of it into a plain, diffable git repo on your disk.</p>
+  <div class="grid">
+    <div class="card"><div class="ico">🧲</div><h3>Harvest everything</h3>
+      <p>16 harness adapters — JSONL, SQLite, VS Code state dbs — all read-only, incremental and idempotent. Run it from cron; only what changed gets re-exported.</p></div>
+    <div class="card"><div class="ico">📦</div><h3>Progressive imports</h3>
+      <p>Drop in ChatGPT, Claude.ai or Gemini Takeout dumps as often as you like. Same conversations update in place — never a duplicate, every import audited in a manifest.</p></div>
+    <div class="card"><div class="ico">🐝</div><h3>Profile swarm</h3>
+      <p>A map-reduce LLM swarm distills personality, preferences, workflow and values into <code>traits.json</code> + a portable <code>SKILL.md</code>. Incremental — only new chats get analyzed.</p></div>
+    <div class="card"><div class="ico">🔐</div><h3>Local-first &amp; redacted</h3>
+      <p>The store is a plain git repo — add your own remote if you want backups. API keys are redacted from exports before anything ever leaves your machine.</p></div>
+  </div>
+</section>
+
+<section id="sources" class="wrap">
+  <h2>Supported harnesses</h2>
+  <p class="sub">Missing one? It's skipped quietly. Sources are plugin adapters — a trait with three methods.</p>
+  <div class="chips">
+    <span class="chip on">claude-code</span><span class="chip on">opencode</span>
+    <span class="chip on">codex</span><span class="chip on">charm crush</span>
+    <span class="chip on">gemini-cli</span><span class="chip on">pi</span>
+    <span class="chip new">antigravity</span><span class="chip new">goose</span>
+    <span class="chip new">copilot</span><span class="chip new">cursor</span>
+    <span class="chip new">amp</span><span class="chip new">continue</span>
+    <span class="chip new">zed</span><span class="chip">chatgpt ↞ import</span>
+    <span class="chip">claude.ai ↞ import</span><span class="chip">gemini ↞ import</span>
+  </div>
+</section>
+
+<section id="install" class="wrap">
+  <h2>Install</h2>
+  <p class="sub">Pick your poison — Arch (AUR), Debian/Ubuntu, Fedora/RHEL, or straight from source.</p>
+  <div class="codewrap"><span class="label">AUR</span>
+<pre><span class="c"># Arch / Manjaro</span>
+yay -S <span class="p">aiyou</span></pre></div>
+  <br>
+  <div class="codewrap"><span class="label">deb / rpm</span>
+<pre><span class="c"># Debian / Ubuntu</span>
+sudo dpkg -i <span class="p">aiyou_0.2.0_amd64.deb</span>
+<span class="c"># Fedora / RHEL</span>
+sudo dnf install <span class="p">aiyou-0.2.0-1.x86_64.rpm</span></pre></div>
+  <br>
+  <div class="codewrap"><span class="label">source</span>
+<pre>git clone https://github.com/geniusrise/you && cd you
+cargo install --path .        <span class="c"># or: cargo install --git https://github.com/geniusrise/you</span></pre></div>
+</section>
+
+<section class="wrap">
+  <h2>Four commands to alignment</h2>
+  <div class="steps">
+    <div class="step"><p><b>Init the store.</b><br><code>aiyou init</code> — creates <code>~/.aiyou</code>, a git repo with your config.</p></div>
+    <div class="step"><p><b>Harvest + import.</b><br><code>aiyou sync</code> pulls every local harness. <code>aiyou import chatgpt ~/dumps.zip</code> merges hosted chats, progressively.</p></div>
+    <div class="step"><p><b>Run the swarm.</b><br><code>aiyou profile</code> — any OpenAI-compatible endpoint — writes <code>traits.json</code> + <code>SKILL.md</code>, incrementally as data evolves.</p></div>
+    <div class="step"><p><b>Install the skill.</b><br><code>aiyou profile install --target claude</code> (or opencode, crush, codex). Now every agent knows you.</p></div>
+  </div>
+  <br>
+  <div class="codewrap"><span class="label">cron</span>
+<pre><span class="c"># keep everything fresh (aiyou cron prints this for you)</span>
+0 3 * * *  <span class="a">aiyou sync</span>
+0 4 * * 0  <span class="a">aiyou profile --if-changed</span></pre></div>
+</section>
+
+<footer class="wrap">
+  <span>MIT © 2026 <a href="https://github.com/geniusrise">geniusrise</a></span>
+  <span><a href="https://github.com/geniusrise/you">source</a> · <a href="https://github.com/geniusrise/you/issues">issues</a></span>
+</footer>
+</body>
+</html>

@@ -1,7 +1,7 @@
 use crate::config::Config;
 use crate::model::{stable_msg_id, Msg, SessionMeta};
 use crate::store::Store;
-use anyhow::{bail, Context, Result};
+use anyhow::{bail, Result};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::path::{Path, PathBuf};
@@ -149,7 +149,7 @@ pub fn import_dump(store: &Store, cfg: &Config, source: &str, path: &Path) -> Re
         "gemini-import" => gemini_takeout::parse_dump(&root, exact_file.as_deref(), &source)?,
         other => bail!("unknown import source {other} (expected chatgpt|claude-ai|gemini)"),
     };
-    sessions.retain(|(m, msgs)| !msgs.is_empty());
+    sessions.retain(|(_, msgs)| !msgs.is_empty());
 
     // identical-dump short-circuit
     let dump_file = match exact_file {

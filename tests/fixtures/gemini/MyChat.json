@@ -1,0 +1,3 @@
+[{"title":"Bread recipe","activity":[
+ {"title":"Prompt: how to bake sourdough","time":"2026-01-01T10:00:00Z","from_who":"user"},
+ {"title":"Response: Mix flour and water...","time":"2026-01-01T10:00:10Z","from_who":"model"}]}]

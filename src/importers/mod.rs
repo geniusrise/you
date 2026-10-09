@@ -137,12 +137,16 @@ fn upsert_session(
 /// Entry point for `aiyou import <source> <path>`.
 pub fn import_dump(store: &Store, cfg: &Config, source: &str, path: &Path) -> Result<ImportReport> {
     let (root, exact_file, _tmp_keepalive) = resolve_path(path)?;
-    let source = source.to_string();
+    // CLI source name -> canonical store source name
+    let source = match source {
+        "gemini" => "gemini-import".to_string(),
+        other => other.to_string(),
+    };
 
     let mut sessions: Vec<(SessionMeta, Vec<Msg>)> = match source.as_str() {
         "chatgpt" => chatgpt::parse_dump(&root, exact_file.as_deref(), &source)?,
         "claude-ai" => claude_ai::parse_dump(&root, exact_file.as_deref(), &source)?,
-        "gemini" => gemini_takeout::parse_dump(&root, exact_file.as_deref(), &source)?,
+        "gemini-import" => gemini_takeout::parse_dump(&root, exact_file.as_deref(), &source)?,
         other => bail!("unknown import source {other} (expected chatgpt|claude-ai|gemini)"),
     };
     sessions.retain(|(m, msgs)| !msgs.is_empty());
@@ -220,7 +224,7 @@ fn find_dump_file(root: &Path, source: &str) -> Result<PathBuf> {
     let names: &[&str] = match source {
         "chatgpt" => &["conversations.json", "chat.json"],
         "claude-ai" => &["conversations.json", "chats.json"],
-        "gemini" => &["MyChat.json", "MyChats.json", "MyActivities.json", "MyActivity.json"],
+        "gemini" | "gemini-import" => &["MyChat.json", "MyChats.json", "MyActivities.json", "MyActivity.json"],
         _ => &["conversations.json"],
     };
     for entry in walkdir::WalkDir::new(root).into_iter().filter_map(|e| e.ok()) {

@@ -1,0 +1,1 @@
+[{"uuid": "conv-1", "name": "Elm vs Rust", "created_at": 1700000000, "updated_at": 1700000050, "chat_messages": [{"uuid": "cm1", "sender": "human", "created_at": 1700000000, "text_message": {"content": "which is better for web"}}], "chat_messages_extra": null}]

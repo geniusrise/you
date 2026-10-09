@@ -104,7 +104,7 @@ pub fn run_with_adapters(
                     fps.0.insert(cache_key, d.fingerprint);
                 }
                 Err(e) => {
-                    eprintln!("[warn] {name}: read {}/{} failed: {e}", d.key, "");
+                    eprintln!("[warn] {name}: read {}/ failed: {e}", d.key);
                     errors += 1;
                 }
             }

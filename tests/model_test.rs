@@ -83,8 +83,10 @@ fn redact_all_redacts_jsonl() {
         updated_ms: 2,
     };
     let mut msgs = vec![Msg { id: "m".into(), role: "user".into(), ts_ms: 1, text: "sk-abcdefghijklmnop".into(), tool: None }];
-    let mut cfg = aiyou::config::Config::default();
-    cfg.redact_all = true;
+    let cfg = aiyou::config::Config {
+        redact_all: true,
+        ..Default::default()
+    };
     st.write_session(&meta, &mut msgs, &cfg).unwrap();
     let (_, msgs2) = st.read_session_jsonl("opencode", "o1").unwrap();
     assert_eq!(msgs2[0].text, "[REDACTED]");

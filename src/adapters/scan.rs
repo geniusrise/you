@@ -70,10 +70,13 @@ pub fn scan(dirs: &[PathBuf], file_filter: fn(&Path) -> bool) -> Vec<ScannedFile
     out
 }
 
+// (role, text, tool, ts, ext_id)
+type Extracted = Vec<(String, String, Option<String>, i64, Option<String>)>;
+
 fn extract_messages(
     v: &serde_json::Value,
     default_ts: i64,
-) -> Vec<(String, String, Option<String>, i64, Option<String>)> {
+) -> Extracted {
     // (role, text, tool, ts, ext_id)
     let mut out = Vec::new();
     let Some(arr) = v["messages"].as_array() else {

@@ -82,9 +82,7 @@ pub fn run(root: &Path, cmd: Cmd) -> Result<()> {
             println!("initialized store at {}", root.display());
             Ok(())
         }
-        Cmd::Status => {
-            status(&root)
-        }
+        Cmd::Status => status(root),
         Cmd::Cron => {
             println!("{}", cron::cron_lines(root));
             Ok(())
@@ -162,7 +160,7 @@ fn status(root: &Path) -> Result<()> {
         println!("  {s:<14} {n:>5} sessions");
     }
     if store.traits_path().exists() {
-        let meta = std::fs::metadata(&store.traits_path())?;
+        let meta = std::fs::metadata(store.traits_path())?;
         if let Some(t) = chrono::DateTime::<chrono::Utc>::from_timestamp(
             meta.modified()?.duration_since(std::time::UNIX_EPOCH)?.as_secs() as i64,
             0,

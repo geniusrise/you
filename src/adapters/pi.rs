@@ -14,7 +14,7 @@ impl Pi {
     }
 
     fn scanned(&self) -> Vec<ScannedFile> {
-        scan(&[self.dir.clone()], |p| {
+        scan(std::slice::from_ref(&self.dir), |p| {
             p.extension().is_some_and(|e| e == "json" || e == "jsonl")
         })
     }

@@ -97,7 +97,8 @@ pub fn run_with_client(store: &Store, cfg: &Config, opts: Opts, client: &LlmClie
             let client = client.clone();
             jobs.push(tokio::spawn(async move {
                 let _permit = permit_sem.acquire_owned().await?;
-                let texts = tokio::task::spawn_blocking(move || -> Result<(usize, String, Vec<(String, String)>)> {
+                type MapTexts = Result<(usize, String, Vec<(String, String)>)>;
+                let texts = tokio::task::spawn_blocking(move || -> MapTexts {
                     let mut combined = String::new();
                     let mut refs = Vec::new();
                     for c in &batch {
@@ -262,6 +263,3 @@ fn count_covered(candidates: &[serde_json::Value]) -> usize {
         .sum()
 }
 
-fn batches_len(candidates: &[serde_json::Value], failed: &[String]) -> usize {
-    candidates.len() + failed.len()
-}

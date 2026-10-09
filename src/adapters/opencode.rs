@@ -211,7 +211,7 @@ impl OpenCode {
         if let Ok(entries) = std::fs::read_dir(&msg_dir) {
             for e in entries.flatten() {
                 let p = e.path();
-                if !p.extension().is_some_and(|x| x == "json") {
+                if p.extension().is_none_or(|x| x != "json") {
                     continue;
                 }
                 let Ok(raw) = std::fs::read_to_string(&p) else { continue };

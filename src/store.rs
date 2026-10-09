@@ -74,7 +74,7 @@ impl Store {
     pub fn write_session(
         &self,
         meta: &crate::model::SessionMeta,
-        msgs: &mut Vec<crate::model::Msg>,
+        msgs: &mut [crate::model::Msg],
         cfg: &crate::config::Config,
     ) -> Result<()> {
         msgs.sort_by(|a, b| (a.ts_ms, &a.id).cmp(&(b.ts_ms, &b.id)));

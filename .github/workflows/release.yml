@@ -148,4 +148,3 @@ jobs:
           git add PKGBUILD .SRCINFO
           git commit -q -m "aiyou ${VERSION}"
           git push -q "ssh://aur@aur.archlinux.org/aiyou.git" HEAD:master
-EOF

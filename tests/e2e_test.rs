@@ -21,8 +21,8 @@ fn e2e_full_journey() {
     // sync: point config at fixtures
     let mut cfg = aiyou::config::Config::load(&store.config_path()).unwrap();
     cfg.sources.claude_dir = Some(fixture("claude-code"));
-    cfg.sources.enabled = vec!["claude-code".into()];
-    cfg.sources.enabled.push("chatgpt".into());
+    cfg.sources.enabled = Some(vec!["claude-code".into()]);
+    cfg.sources.enabled.as_mut().unwrap().push("chatgpt".into());
     cfg.save(&store.config_path()).unwrap();
     let rep = aiyou::sync::run(&store, &cfg, None).unwrap();
     assert_eq!(rep.per_source, vec![("claude-code".to_string(), 1, 0, 0)]);

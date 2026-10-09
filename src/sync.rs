@@ -27,7 +27,9 @@ fn save_fps(path: &Path, fps: &Fingerprints) -> Result<()> {
 
 pub fn run(store: &Store, cfg: &Config, only: Option<&[String]>) -> Result<SyncReport> {
     let mut adapters = registry(store, cfg);
-    adapters.retain(|a| cfg.sources.enabled.iter().any(|s| s == a.name()));
+    if let Some(enabled) = &cfg.sources.enabled {
+        adapters.retain(|a| enabled.iter().any(|s| s == a.name()));
+    }
     if let Some(list) = only {
         for wanted in list {
             if !crate::config::SOURCES.contains(&wanted.as_str()) {
@@ -73,8 +75,13 @@ pub fn run_with_adapters(
                 continue;
             }
             match adapter.read(&d.key) {
-                Ok((meta, mut msgs)) => {
-                    let mut meta = meta;
+                Ok((mut meta, mut msgs)) => {
+                    if msgs.is_empty() {
+                        // nothing to store (e.g. workspace db without chat data);
+                        // remember the fingerprint so we don't re-read it every run
+                        fps.0.insert(cache_key, d.fingerprint);
+                        continue;
+                    }
                     if meta.source.is_empty() {
                         meta.source = name.to_string();
                     }
@@ -171,5 +178,58 @@ pub fn registry(store: &Store, cfg: &Config) -> Vec<Box<dyn Adapter>> {
         .clone()
         .unwrap_or_else(|| std::path::PathBuf::from(&home).join(".pi"));
     out.push(Box::new(crate::adapters::pi::Pi::new(pi)));
+    let antigravity = cfg
+        .sources
+        .antigravity_dir
+        .clone()
+        .unwrap_or_else(|| std::path::PathBuf::from(&home).join(".gemini/antigravity-cli"));
+    out.push(Box::new(crate::adapters::antigravity::Antigravity::new(antigravity)));
+    let goose = cfg
+        .sources
+        .goose_db
+        .clone()
+        .unwrap_or_else(|| std::path::PathBuf::from(&home).join(".local/share/goose/sessions/sessions.db"));
+    out.push(Box::new(crate::adapters::goose::Goose::new(goose)));
+    let vscode = cfg.sources.vscode_storage.clone().unwrap_or_else(|| {
+        let mut v = Vec::new();
+        for ed in ["Code", "Code - OSS", "VSCodium", "Cursor"] {
+            v.push(
+                std::path::PathBuf::from(&home)
+                    .join(".config")
+                    .join(ed)
+                    .join("User/workspaceStorage"),
+            );
+        }
+        v
+    });
+    out.push(Box::new(crate::adapters::copilot::Copilot::new(vscode.clone())));
+    let cursor_dirs = cfg.sources.cursor_dirs.clone().unwrap_or_else(|| {
+        vec![std::path::PathBuf::from(&home)
+            .join(".config/Cursor/User/workspaceStorage")]
+    });
+    out.push(Box::new(crate::adapters::cursor::Cursor::new(cursor_dirs)));
+    let continue_dir = cfg
+        .sources
+        .continue_dir
+        .clone()
+        .unwrap_or_else(|| std::path::PathBuf::from(&home).join(".continue/sessions"));
+    out.push(Box::new(crate::adapters::generic::GenericScan::new(
+        "continue",
+        vec![continue_dir],
+    )));
+    let amp_dirs = cfg.sources.amp_dirs.clone().unwrap_or_else(|| {
+        vec![
+            std::path::PathBuf::from(&home).join(".config/amp/sessions"),
+            std::path::PathBuf::from(&home).join(".local/share/amp/sessions"),
+        ]
+    });
+    out.push(Box::new(crate::adapters::generic::GenericScan::new("amp", amp_dirs)));
+    let zed_dirs = cfg.sources.zed_dirs.clone().unwrap_or_else(|| {
+        vec![
+            std::path::PathBuf::from(&home).join(".config/zed/conversations"),
+            std::path::PathBuf::from(&home).join(".local/share/zed/conversations"),
+        ]
+    });
+    out.push(Box::new(crate::adapters::generic::GenericScan::new("zed", zed_dirs)));
     out
 }

@@ -92,6 +92,32 @@ fn extract_messages(
         let ext_id = m["id"].as_str().map(|s| s.to_string());
         if let Some(content) = m["content"].as_str() {
             out.push((role, content.to_string(), None, ts, ext_id.clone()));
+        } else if let Some(content) = m["content"].as_array() {
+            // array of strings or {text} objects
+            let text = content
+                .iter()
+                .filter_map(|c| match c {
+                    serde_json::Value::String(s) => Some(s.clone()),
+                    other => other["text"].as_str().map(|s| s.to_string()),
+                })
+                .collect::<Vec<_>>()
+                .join("\n");
+            if !text.is_empty() {
+                out.push((role, text, None, ts, ext_id.clone()));
+            }
+        } else if let Some(um) = m["userMessage"].as_str() {
+            out.push(("user".to_string(), um.to_string(), None, ts, ext_id.clone()));
+        } else if m["message"].is_object() {
+            let inner = &m["message"];
+            let irole = inner["role"].as_str().unwrap_or(&role).to_string();
+            let itext = inner["content"]
+                .as_str()
+                .or_else(|| inner["text"].as_str())
+                .unwrap_or_default()
+                .to_string();
+            if !itext.is_empty() {
+                out.push((irole, itext, None, ts, ext_id.clone()));
+            }
         } else if let Some(parts) = m["parts"].as_array() {
             let mut text = String::new();
             let mut tool: Option<String> = None;
@@ -136,15 +162,28 @@ fn parse_value(path: &Path) -> Result<serde_json::Value> {
     let raw = std::fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?;
     if path.extension().is_some_and(|e| e == "jsonl") {
         let mut found = serde_json::Value::Null;
+        let mut lines_as_messages: Vec<serde_json::Value> = Vec::new();
         for line in raw.lines() {
             if let Ok(obj) = serde_json::from_str::<serde_json::Value>(line) {
                 if obj["messages"].is_array() {
                     return Ok(obj);
                 }
                 if found.is_null() {
-                    found = obj;
+                    found = obj.clone();
+                }
+                // a bare message line: has a role-ish and text-ish key
+                let roleish = obj["role"].is_string() || obj["sender"].is_string();
+                let textish = obj["text"].is_string()
+                    || obj["content"].is_string()
+                    || obj["message"].is_string()
+                    || obj["userMessage"].is_string();
+                if roleish || textish {
+                    lines_as_messages.push(obj);
                 }
             }
+        }
+        if !lines_as_messages.is_empty() {
+            return Ok(serde_json::json!({ "messages": lines_as_messages }));
         }
         if found.is_null() {
             anyhow::bail!("no JSON objects found in {}", path.display());
@@ -209,4 +248,62 @@ pub fn parse_scanned(
         },
         msgs,
     ))
+}
+
+/// Recursively find arrays of {role,text}-ish objects inside an arbitrary JSON
+/// blob (used for VS Code-style state.vscdb chat payloads).
+pub fn find_message_arrays(
+    v: &serde_json::Value,
+    out: &mut Vec<crate::model::Msg>,
+    session_key: &str,
+    start_idx: &mut usize,
+) {
+    match v {
+        serde_json::Value::Array(arr) => {
+            let msgish = arr
+                .iter()
+                .filter(|item| {
+                    let roleish = item["role"].is_string() || item["speaker"].is_string();
+                    let textish = item["text"].is_string()
+                        || item["content"].is_string()
+                        || (item["content"]["type"].is_string() && item["content"]["value"].is_string());
+                    roleish && textish
+                })
+                .count();
+            if msgish > 0 && msgish >= arr.len() / 2 {
+                for item in arr {
+                    let role = item["role"]
+                        .as_str()
+                        .or_else(|| item["speaker"].as_str())
+                        .unwrap_or("assistant");
+                    let text = item["text"]
+                        .as_str()
+                        .or_else(|| item["content"].as_str())
+                        .or_else(|| item["content"]["value"].as_str())
+                        .unwrap_or_default();
+                    if text.trim().is_empty() {
+                        continue;
+                    }
+                    out.push(crate::model::Msg {
+                        id: format!("{session_key}:{}", *start_idx),
+                        role: role.to_string(),
+                        ts_ms: item["timestamp"].as_i64().or_else(|| item["createdAt"].as_i64()).unwrap_or(0),
+                        text: text.chars().take(8000).collect(),
+                        tool: None,
+                    });
+                    *start_idx += 1;
+                }
+                return;
+            }
+            for item in arr {
+                find_message_arrays(item, out, session_key, start_idx);
+            }
+        }
+        serde_json::Value::Object(map) => {
+            for (_k, val) in map {
+                find_message_arrays(val, out, session_key, start_idx);
+            }
+        }
+        _ => {}
+    }
 }

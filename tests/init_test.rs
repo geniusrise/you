@@ -8,6 +8,7 @@ fn init_creates_store_and_config() {
     assert!(st.config_path().is_file());
     let cfg = Config::load(&st.config_path()).unwrap();
     assert_eq!(cfg.profile.workers, 4);
+    assert_eq!(cfg.sources.enabled, None);
     assert_eq!(cfg.profile.model, "gpt-5.2");
     assert!(st.chats_dir().is_dir());
     assert!(st.profile_dir().is_dir());
@@ -26,7 +27,7 @@ fn config_roundtrip_preserves_source_paths() {
     cfg.save(&p).unwrap();
     let loaded = Config::load(&p).unwrap();
     assert_eq!(loaded.sources.claude_dir, cfg.sources.claude_dir);
-    assert!(loaded.sources.enabled.contains(&"claude-code".to_string()));
+    assert!(loaded.sources.enabled.is_none()); // absent = all sources enabled
 }
 
 #[test]

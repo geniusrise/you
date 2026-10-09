@@ -9,15 +9,23 @@ pub const SOURCES: &[&str] = &[
     "crush",
     "gemini-cli",
     "pi",
+    "antigravity",
+    "goose",
+    "copilot",
+    "cursor",
+    "amp",
+    "continue",
+    "zed",
     "chatgpt",
     "claude-ai",
     "gemini-import",
 ];
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct SourcesCfg {
-    #[serde(default = "default_enabled")]
-    pub enabled: Vec<String>,
+    /// Restrict to these sources; omit/None for all (default).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub enabled: Option<Vec<String>>,
     pub claude_dir: Option<std::path::PathBuf>,
     pub opencode_db: Option<std::path::PathBuf>,
     pub opencode_storage: Option<std::path::PathBuf>,
@@ -25,26 +33,15 @@ pub struct SourcesCfg {
     pub gemini_dir: Option<std::path::PathBuf>,
     pub crush_dirs: Option<Vec<std::path::PathBuf>>,
     pub pi_dir: Option<std::path::PathBuf>,
+    pub antigravity_dir: Option<std::path::PathBuf>,
+    pub goose_db: Option<std::path::PathBuf>,
+    pub vscode_storage: Option<Vec<std::path::PathBuf>>,
+    pub cursor_dirs: Option<Vec<std::path::PathBuf>>,
+    pub continue_dir: Option<std::path::PathBuf>,
+    pub amp_dirs: Option<Vec<std::path::PathBuf>>,
+    pub zed_dirs: Option<Vec<std::path::PathBuf>>,
 }
 
-impl Default for SourcesCfg {
-    fn default() -> Self {
-        Self {
-            enabled: default_enabled(),
-            claude_dir: None,
-            opencode_db: None,
-            opencode_storage: None,
-            codex_dir: None,
-            gemini_dir: None,
-            crush_dirs: None,
-            pi_dir: None,
-        }
-    }
-}
-
-fn default_enabled() -> Vec<String> {
-    SOURCES.iter().map(|s| s.to_string()).collect()
-}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProfileCfg {

@@ -1,0 +1,4 @@
+[{"title":"Rust help","create_time":1700000000,"update_time":1700000200,"mapping":{
+ "n1":{"id":"n1","message":{"id":"m1","author":{"role":"user"},"create_time":1700000000,"content":{"content_type":"text","parts":["how do lifetimes work"]}}},
+ "n2":{"id":"n2","message":{"id":"m2","author":{"role":"assistant"},"create_time":1700000005,"content":{"content_type":"text","parts":["Lifetimes are..."]}}},
+ "n3":{"id":"n3","message":{"id":"m3","author":{"role":"user"},"create_time":1700000100,"content":{"content_type":"text","parts":["and borrowing?"]}}}}}]

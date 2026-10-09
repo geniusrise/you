@@ -1,0 +1,4 @@
+{"type":"last-prompt","leafUuid":"u1","sessionId":"session-a"}
+{"parentUuid":null,"isSidechain":false,"type":"user","uuid":"u1","timestamp":"2026-10-01T10:00:00.000Z","message":{"role":"user","content":"fix the bug"}}
+{"parentUuid":"u1","isSidechain":false,"type":"assistant","uuid":"u2","timestamp":"2026-10-01T10:00:05.000Z","message":{"role":"assistant","content":[{"type":"text","text":"Looking at it"},{"type":"tool_use","name":"Bash","input":{"command":"ls"}}]}}
+{"parentUuid":"u2","isSidechain":true,"type":"user","uuid":"u3","timestamp":"2026-10-01T10:00:06.000Z","message":{"role":"user","content":[{"type":"tool_result","content":"file1"}]}}

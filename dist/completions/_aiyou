@@ -1,0 +1,258 @@
+#compdef aiyou
+
+autoload -U is-at-least
+
+_aiyou() {
+    typeset -A opt_args
+    typeset -a _arguments_options
+    local ret=1
+
+    if is-at-least 5.2; then
+        _arguments_options=(-s -S -C)
+    else
+        _arguments_options=(-s -C)
+    fi
+
+    local context curcontext="$curcontext" state line
+    _arguments "${_arguments_options[@]}" : \
+'--root=[Store root (default\: \$AIYOU_HOME or ~/.aiyou)]:ROOT:_files' \
+'--shell=[Print shell completions for the given shell and exit]:SHELL:(bash elvish fish powershell zsh)' \
+'-h[Print help]' \
+'--help[Print help]' \
+'-V[Print version]' \
+'--version[Print version]' \
+":: :_aiyou_commands" \
+"*::: :->aiyou" \
+&& ret=0
+    case $state in
+    (aiyou)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:aiyou-command-$line[1]:"
+        case $line[1] in
+            (init)
+_arguments "${_arguments_options[@]}" : \
+'--root=[Store root (default\: \$AIYOU_HOME or ~/.aiyou)]:ROOT:_files' \
+'--shell=[Print shell completions for the given shell and exit]:SHELL:(bash elvish fish powershell zsh)' \
+'-h[Print help]' \
+'--help[Print help]' \
+&& ret=0
+;;
+(sync)
+_arguments "${_arguments_options[@]}" : \
+'*--source=[Restrict to these sources (repeatable)]:SOURCES:_default' \
+'--root=[Store root (default\: \$AIYOU_HOME or ~/.aiyou)]:ROOT:_files' \
+'--shell=[Print shell completions for the given shell and exit]:SHELL:(bash elvish fish powershell zsh)' \
+'-h[Print help]' \
+'--help[Print help]' \
+&& ret=0
+;;
+(import)
+_arguments "${_arguments_options[@]}" : \
+'--root=[Store root (default\: \$AIYOU_HOME or ~/.aiyou)]:ROOT:_files' \
+'--shell=[Print shell completions for the given shell and exit]:SHELL:(bash elvish fish powershell zsh)' \
+'-h[Print help]' \
+'--help[Print help]' \
+':source -- One of\: chatgpt, claude-ai, gemini:_default' \
+':path -- Path to dump file (.json) or directory or .zip:_files' \
+&& ret=0
+;;
+(profile)
+_arguments "${_arguments_options[@]}" : \
+'--model=[Override model from config]:MODEL:_default' \
+'--workers=[Override worker count from config]:WORKERS:_default' \
+'--root=[Store root (default\: \$AIYOU_HOME or ~/.aiyou)]:ROOT:_files' \
+'--shell=[Print shell completions for the given shell and exit]:SHELL:(bash elvish fish powershell zsh)' \
+'--if-changed[Skip if no chats changed since last run (cron-friendly)]' \
+'-h[Print help]' \
+'--help[Print help]' \
+&& ret=0
+;;
+(profile-install)
+_arguments "${_arguments_options[@]}" : \
+'--target=[One of\: claude, opencode, crush, codex]:TARGET:_default' \
+'--agents-dir=[Custom agents/skills directory]:AGENTS_DIR:_files' \
+'--root=[Store root (default\: \$AIYOU_HOME or ~/.aiyou)]:ROOT:_files' \
+'--shell=[Print shell completions for the given shell and exit]:SHELL:(bash elvish fish powershell zsh)' \
+'-h[Print help]' \
+'--help[Print help]' \
+&& ret=0
+;;
+(status)
+_arguments "${_arguments_options[@]}" : \
+'--root=[Store root (default\: \$AIYOU_HOME or ~/.aiyou)]:ROOT:_files' \
+'--shell=[Print shell completions for the given shell and exit]:SHELL:(bash elvish fish powershell zsh)' \
+'-h[Print help]' \
+'--help[Print help]' \
+&& ret=0
+;;
+(cron)
+_arguments "${_arguments_options[@]}" : \
+'--root=[Store root (default\: \$AIYOU_HOME or ~/.aiyou)]:ROOT:_files' \
+'--shell=[Print shell completions for the given shell and exit]:SHELL:(bash elvish fish powershell zsh)' \
+'-h[Print help]' \
+'--help[Print help]' \
+&& ret=0
+;;
+(help)
+_arguments "${_arguments_options[@]}" : \
+":: :_aiyou__subcmd__help_commands" \
+"*::: :->help" \
+&& ret=0
+
+    case $state in
+    (help)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:aiyou-help-command-$line[1]:"
+        case $line[1] in
+            (init)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(sync)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(import)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(profile)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(profile-install)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(status)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(cron)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(help)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+        esac
+    ;;
+esac
+;;
+        esac
+    ;;
+esac
+}
+
+(( $+functions[_aiyou_commands] )) ||
+_aiyou_commands() {
+    local commands; commands=(
+'init:Create the store, config and git repo' \
+'sync:Harvest chats from local harnesses (run from cron to keep updating)' \
+'import:Import a dump from ChatGPT / Claude / Gemini (re-import newer dumps safely)' \
+'profile:Run the LLM swarm over all chats to (re)build your profile + SKILL.md' \
+'profile-install:Install the generated SKILL.md into a harness skill directory' \
+'status:Show per-source counts, last sync and last profile info' \
+'cron:Print crontab lines for scheduled sync + profile' \
+'help:Print this message or the help of the given subcommand(s)' \
+    )
+    _describe -t commands 'aiyou commands' commands "$@"
+}
+(( $+functions[_aiyou__subcmd__cron_commands] )) ||
+_aiyou__subcmd__cron_commands() {
+    local commands; commands=()
+    _describe -t commands 'aiyou cron commands' commands "$@"
+}
+(( $+functions[_aiyou__subcmd__help_commands] )) ||
+_aiyou__subcmd__help_commands() {
+    local commands; commands=(
+'init:Create the store, config and git repo' \
+'sync:Harvest chats from local harnesses (run from cron to keep updating)' \
+'import:Import a dump from ChatGPT / Claude / Gemini (re-import newer dumps safely)' \
+'profile:Run the LLM swarm over all chats to (re)build your profile + SKILL.md' \
+'profile-install:Install the generated SKILL.md into a harness skill directory' \
+'status:Show per-source counts, last sync and last profile info' \
+'cron:Print crontab lines for scheduled sync + profile' \
+'help:Print this message or the help of the given subcommand(s)' \
+    )
+    _describe -t commands 'aiyou help commands' commands "$@"
+}
+(( $+functions[_aiyou__subcmd__help__subcmd__cron_commands] )) ||
+_aiyou__subcmd__help__subcmd__cron_commands() {
+    local commands; commands=()
+    _describe -t commands 'aiyou help cron commands' commands "$@"
+}
+(( $+functions[_aiyou__subcmd__help__subcmd__help_commands] )) ||
+_aiyou__subcmd__help__subcmd__help_commands() {
+    local commands; commands=()
+    _describe -t commands 'aiyou help help commands' commands "$@"
+}
+(( $+functions[_aiyou__subcmd__help__subcmd__import_commands] )) ||
+_aiyou__subcmd__help__subcmd__import_commands() {
+    local commands; commands=()
+    _describe -t commands 'aiyou help import commands' commands "$@"
+}
+(( $+functions[_aiyou__subcmd__help__subcmd__init_commands] )) ||
+_aiyou__subcmd__help__subcmd__init_commands() {
+    local commands; commands=()
+    _describe -t commands 'aiyou help init commands' commands "$@"
+}
+(( $+functions[_aiyou__subcmd__help__subcmd__profile_commands] )) ||
+_aiyou__subcmd__help__subcmd__profile_commands() {
+    local commands; commands=()
+    _describe -t commands 'aiyou help profile commands' commands "$@"
+}
+(( $+functions[_aiyou__subcmd__help__subcmd__profile-install_commands] )) ||
+_aiyou__subcmd__help__subcmd__profile-install_commands() {
+    local commands; commands=()
+    _describe -t commands 'aiyou help profile-install commands' commands "$@"
+}
+(( $+functions[_aiyou__subcmd__help__subcmd__status_commands] )) ||
+_aiyou__subcmd__help__subcmd__status_commands() {
+    local commands; commands=()
+    _describe -t commands 'aiyou help status commands' commands "$@"
+}
+(( $+functions[_aiyou__subcmd__help__subcmd__sync_commands] )) ||
+_aiyou__subcmd__help__subcmd__sync_commands() {
+    local commands; commands=()
+    _describe -t commands 'aiyou help sync commands' commands "$@"
+}
+(( $+functions[_aiyou__subcmd__import_commands] )) ||
+_aiyou__subcmd__import_commands() {
+    local commands; commands=()
+    _describe -t commands 'aiyou import commands' commands "$@"
+}
+(( $+functions[_aiyou__subcmd__init_commands] )) ||
+_aiyou__subcmd__init_commands() {
+    local commands; commands=()
+    _describe -t commands 'aiyou init commands' commands "$@"
+}
+(( $+functions[_aiyou__subcmd__profile_commands] )) ||
+_aiyou__subcmd__profile_commands() {
+    local commands; commands=()
+    _describe -t commands 'aiyou profile commands' commands "$@"
+}
+(( $+functions[_aiyou__subcmd__profile-install_commands] )) ||
+_aiyou__subcmd__profile-install_commands() {
+    local commands; commands=()
+    _describe -t commands 'aiyou profile-install commands' commands "$@"
+}
+(( $+functions[_aiyou__subcmd__status_commands] )) ||
+_aiyou__subcmd__status_commands() {
+    local commands; commands=()
+    _describe -t commands 'aiyou status commands' commands "$@"
+}
+(( $+functions[_aiyou__subcmd__sync_commands] )) ||
+_aiyou__subcmd__sync_commands() {
+    local commands; commands=()
+    _describe -t commands 'aiyou sync commands' commands "$@"
+}
+
+if [ "$funcstack[1]" = "_aiyou" ]; then
+    _aiyou "$@"
+else
+    compdef _aiyou aiyou
+fi

@@ -1,10 +1,12 @@
+%define debug_package %{nil}
+
 Name:           aiyou
 Version:        REPLACE_VERSION
 Release:        1%{?dist}
 Summary:        Export, maintain and analyze all your AI coding-agent chat history
 License:        MIT
 URL:            https://github.com/geniusrise/you
-Source0:        aiyou
+Source0:        aiyou-binary.tar.gz
 BuildArch:      REPLACE_ARCH
 AutoReqProv:    no
 Requires:       git

@@ -50,10 +50,10 @@ pub fn render_markdown(meta: &SessionMeta, msgs: &[Msg]) -> String {
             "user" => out.push_str(&format!("**user**:\n\n{}\n\n", m.text)),
             "assistant" => out.push_str(&format!("**assistant**:\n\n{}\n\n", m.text)),
             "system" => out.push_str(&format!("**system**:\n\n{}\n\n", m.text)),
-            _ => {
-                let tool = m.tool.as_deref().unwrap_or("tool");
-                out.push_str(&format!("> tool: `{tool}`\n\n> {}\n\n", m.text));
-            }
+            _ => out.push_str(&format!("**tool**:\n\n{}\n\n", m.text)),
+        }
+        if let Some(tool) = &m.tool {
+            out.push_str(&format!("> tool: `{tool}`\n\n"));
         }
     }
     out

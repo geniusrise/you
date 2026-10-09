@@ -1,0 +1,1 @@
+{"id":"crush-1","title":"Crush chat","messages":[{"role":"user","parts":[{"type":"text","text":"hello crush"}]},{"role":"assistant","parts":[{"type":"text","text":"hi there"}]},{"role":"assistant","parts":[{"type":"tool","tool":"Bash","state":{"output":"ok"}}]}]}

@@ -1,5 +1,4 @@
 use super::{Adapter, DiscoveredSession};
-use anyhow::Result as _;
 use crate::model::{Msg, SessionMeta};
 use anyhow::{Context, Result};
 use chrono::DateTime;

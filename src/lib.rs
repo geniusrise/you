@@ -16,7 +16,7 @@ use clap::{Parser, Subcommand};
 use std::path::PathBuf;
 
 #[derive(Parser)]
-#[command(name = "aiyou", version, about = "Export, maintain and analyze all your AI agent chat history in one git-versioned store")]
+#[command(name = "aiyou", version, about = "Teach every AI agent who you are: extract your personality and working style from your chats into a me skill, kept current with your approval")]
 pub struct Cli {
     /// Store root (default: $AIYOU_HOME or ~/.aiyou)
     #[arg(long, global = true)]
@@ -47,7 +47,7 @@ pub enum Cmd {
         /// Path to dump file (.json) or directory or .zip
         path: PathBuf,
     },
-    /// Run the LLM swarm over all chats to (re)build your profile + SKILL.md
+    /// Run the LLM swarm over new chats and propose changes to your profile (review before they apply)
     Profile {
         /// Skip if no chats changed since last run (cron-friendly)
         #[arg(long)]
@@ -58,16 +58,38 @@ pub enum Cmd {
         /// Override worker count from config
         #[arg(long)]
         workers: Option<usize>,
+        /// Apply proposed changes immediately instead of waiting for review
+        #[arg(long)]
+        yes: bool,
     },
-    /// Install the generated SKILL.md into a harness skill directory
-    ProfileInstall {
-        /// One of: claude, opencode, crush, codex
+    /// Show the changes the last `profile` run proposes to your profile
+    Review,
+    /// Accept proposed profile changes (all, or the given ids)
+    Accept {
+        ids: Vec<String>,
+    },
+    /// Decline proposed profile changes (all, or the given ids); they won't be proposed again
+    Reject {
+        ids: Vec<String>,
+    },
+    /// Install your `me` skill into an agent (skill dir, context-file block, or stdout)
+    #[command(alias = "profile-install")]
+    Install {
+        /// claude|opencode|crush|codex (skill dirs) or claude-md|gemini|codex-md|agents-md (context files)
         #[arg(long)]
         target: Option<String>,
         /// Custom agents/skills directory
         #[arg(long)]
         agents_dir: Option<PathBuf>,
+        /// Insert/refresh a managed block in this context file (AGENTS.md, CLAUDE.md, ...)
+        #[arg(long)]
+        file: Option<PathBuf>,
+        /// Print the skill to stdout
+        #[arg(long)]
+        print: bool,
     },
+    /// Diagnose sources, config and the profile endpoint
+    Doctor,
     /// Show per-source counts, last sync and last profile info
     Status,
     /// Print crontab lines for scheduled sync + profile
@@ -110,7 +132,7 @@ pub fn run(root: &Path, cmd: Cmd) -> Result<()> {
             );
             Ok(())
         }
-        Cmd::Profile { if_changed, model, workers } => {
+        Cmd::Profile { if_changed, model, workers, yes } => {
             let store = ensure_store(root)?;
             let mut cfg = config::Config::load(&store.config_path())?;
             if let Some(m) = model {
@@ -119,13 +141,66 @@ pub fn run(root: &Path, cmd: Cmd) -> Result<()> {
             if let Some(w) = workers {
                 cfg.profile.workers = w;
             }
-            profile::pipeline::run(&store, &cfg, profile::pipeline::Opts { if_changed })
+            profile::pipeline::run(&store, &cfg, profile::pipeline::Opts { if_changed, yes })
         }
-        Cmd::ProfileInstall { target, agents_dir } => {
+        Cmd::Review => {
             let store = ensure_store(root)?;
-            profile::render_skill::install(&store, target.as_deref(), agents_dir.as_deref())
+            profile::review::review(&store)?;
+            Ok(())
+        }
+        Cmd::Accept { ids } => resolve_cmd(root, &ids, true),
+        Cmd::Reject { ids } => resolve_cmd(root, &ids, false),
+        Cmd::Install { target, agents_dir, file, print } => {
+            let store = ensure_store(root)?;
+            profile::render_skill::install(&store, target.as_deref(), agents_dir.as_deref(), file.as_deref(), print)
+        }
+        Cmd::Doctor => doctor(root),
+    }
+}
+
+fn resolve_cmd(root: &Path, ids: &[String], accept: bool) -> Result<()> {
+    let store = ensure_store(root)?;
+    let (n, left) = profile::review::resolve(&store, ids, accept)?;
+    println!("{} {n} change(s){}", if accept { "accepted" } else { "rejected" }, if left > 0 { format!("; {left} still pending") } else { String::new() });
+    if accept {
+        println!("skill updated: {} — `aiyou install` to push it to your agents", store.skill_path().display());
+    }
+    Ok(())
+}
+
+fn doctor(root: &Path) -> Result<()> {
+    let store = store::Store::open(root)?;
+    if !store.config_path().exists() {
+        println!("store     MISSING  {} — run `aiyou init`", root.display());
+        return Ok(());
+    }
+    let cfg = config::Config::load(&store.config_path())?;
+    println!("store     ok       {}", root.display());
+    println!("git       {}", if std::process::Command::new("git").arg("--version").output().is_ok() { "ok" } else { "MISSING — history won't be versioned" });
+    println!(
+        "llm       {}  {} via ${}",
+        if std::env::var(&cfg.profile.api_key_env).is_ok() { "ok      " } else { "NO KEY  " },
+        cfg.profile.model,
+        cfg.profile.api_key_env
+    );
+    println!("\nsources:");
+    let mut adapters = sync::registry(&store, &cfg);
+    if let Some(enabled) = &cfg.sources.enabled {
+        adapters.retain(|a| enabled.iter().any(|s| s == a.name()));
+    }
+    for a in &adapters {
+        match a.discover() {
+            Ok(d) if d.is_empty() => println!("  {:<14} none found", a.name()),
+            Ok(d) => println!("  {:<14} {} session(s)", a.name(), d.len()),
+            Err(e) => println!("  {:<14} ERROR {e:#}", a.name()),
         }
     }
+    match profile::review::Proposal::load(&store) {
+        Ok(Some(p)) => println!("\nprofile   {} change(s) awaiting review (`aiyou review`)", p.changes.len()),
+        Ok(None) => println!("\nprofile   no pending changes"),
+        Err(e) => println!("\nprofile   proposal.json unreadable: {e:#}"),
+    }
+    Ok(())
 }
 
 fn ensure_store(root: &Path) -> Result<store::Store> {
@@ -173,6 +248,9 @@ fn status(root: &Path) -> Result<()> {
         }
     } else {
         println!("last profile: never");
+    }
+    if let Ok(Some(p)) = profile::review::Proposal::load(&store) {
+        println!("pending: {} profile change(s) — run `aiyou review`", p.changes.len());
     }
     if let Some(c) = git::last_commit(&store.root) {
         println!("git: {c}");

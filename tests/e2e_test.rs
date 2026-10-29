@@ -39,17 +39,17 @@ fn e2e_full_journey() {
     aiyou::profile::pipeline::run_with_client(
         &store,
         &cfg,
-        aiyou::profile::pipeline::Opts { if_changed: false },
+        aiyou::profile::pipeline::Opts { if_changed: false, yes: true },
         &client,
     )
     .unwrap();
     let skill = std::fs::read_to_string(store.skill_path()).unwrap();
-    assert!(skill.starts_with("---\nname: user-persona\n"));
+    assert!(skill.starts_with("---\nname: me\n"));
     assert!(store.traits_path().is_file());
 
     // install into a custom agents dir
-    aiyou::profile::render_skill::install(&store, None, Some(&tmp.path().join("agents"))).unwrap();
-    let installed = std::fs::read_to_string(tmp.path().join("agents/user-persona/SKILL.md")).unwrap();
+    aiyou::profile::render_skill::install(&store, None, Some(&tmp.path().join("agents")), None, false).unwrap();
+    let installed = std::fs::read_to_string(tmp.path().join("agents/me/SKILL.md")).unwrap();
     assert_eq!(installed, skill);
 
     // git log: init + sync + import + import + profile
@@ -109,3 +109,18 @@ fn mock_client() -> (aiyou::profile::client::LlmClient, std::sync::Arc<std::sync
 }
 
 use std::sync::atomic::Ordering;
+
+#[test]
+fn install_injects_managed_block_idempotently_without_clobbering() {
+    use aiyou::profile::render_skill::upsert_block;
+    let once = upsert_block("# My notes\nkeep me\n", "- terse\n");
+    assert!(once.starts_with("# My notes\nkeep me"));
+    assert!(once.contains("<!-- aiyou:begin -->\n- terse\n<!-- aiyou:end -->"));
+    // refresh replaces in place, user text before and after survives
+    let with_tail = format!("{once}\n## after\nstuff\n");
+    let twice = upsert_block(&with_tail, "- verbose\n");
+    assert!(twice.contains("- verbose") && !twice.contains("- terse"));
+    assert!(twice.contains("keep me") && twice.contains("## after\nstuff"));
+    assert_eq!(twice.matches("aiyou:begin").count(), 1);
+    assert_eq!(upsert_block("", "x\n"), "<!-- aiyou:begin -->\nx\n<!-- aiyou:end -->\n");
+}

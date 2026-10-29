@@ -10,7 +10,7 @@ Maintenance guide for AI agents (and humans) working on **aiyou**. Read this bef
 
 1. **Harvests** chat history from local coding-agent harnesses into one normalized, git-versioned store (`~/.aiyou`).
 2. **Imports** progressive dumps from hosted chat products (ChatGPT, Claude.ai, Gemini).
-3. **Profiles** the user via an incremental LLM map-reduce ("swarm") to maintain `traits.json` + a portable `SKILL.md`.
+3. **Profiles** the user via an incremental LLM map-reduce ("swarm"). Runs *propose* changes; the user approves them (`review`/`accept`/`reject`) before `traits.json` and the portable `me` `SKILL.md` change.
 
 Local-first, read-only against sources, secrets redacted, no network except `aiyou profile`.
 
@@ -43,7 +43,8 @@ src/
     client.rs         # LlmClient (OpenAI-compatible, retry, salvage_json)
     pipeline.rs       # map/reduce swarm; run_with_client() is the testable entry
     traits.rs         # CATEGORIES, Trait, Evidence, ProfileDoc (normalize/cap)
-    render_skill.rs   # deterministic SKILL.md renderer + install()
+    review.rs         # approval flow: Proposal, State, diff(), apply(), resolve()
+    render_skill.rs   # deterministic `me` SKILL.md renderer + install() (skill dirs, managed blocks, --print)
 tests/                # one file per concern; fixtures in tests/fixtures/<source>/
 packaging/aur/PKGBUILD, packaging/deb/control, packaging/rpm/aiyou.spec
 .github/workflows/    # ci.yml, release.yml, pages.yml
@@ -120,7 +121,10 @@ cargo build --release --locked          # Cargo.lock is committed; keep it updat
 
 - Prompt changes belong in `pipeline.rs` constants only. Keep `MAP_SYSTEM` demanding strict JSON and "HUMAN user only"; keep `REDUCE_SYSTEM` preserving ids on merge.
 - `ProfileDoc::normalize`: drop confidence < 0.3, cap 100, categories validated against `CATEGORIES`.
-- Every run writes: `traits.json`, `SKILL.md`, `runs/<ts>.json` audit, one git commit `profile: N traits from M sessions`.
+- A run writes `runs/<ts>.json` and stages `proposal.json`; it must NOT touch `traits.json`/`SKILL.md`. Only `review::resolve` (accept) does, plus a git commit `profile: accepted N change(s)`. `--yes` / `auto_accept` just call `resolve` right away.
+- Incrementality is by content hash (`profile/state.json`), never mtime. Hashes are recorded only for chats in *successful* batches, and only once the proposal is fully resolved — keep it that way or failed batches get silently dropped.
+- `review::diff` is deterministic: unmentioned existing traits are kept; removal only via the reducer's explicit `retired` ids. Evidence-only churn and confidence wobble < 0.15 are not proposed. Rejected ids (`rejected.json`) are never re-proposed.
+- Write every store file with `store::write_atomic` (temp + rename).
 - `run_with_client(store, cfg, Opts, &LlmClient)` is the test seam — never make the client a global.
 
 ---

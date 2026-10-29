@@ -21,8 +21,7 @@ fn load_fps(path: &Path) -> Fingerprints {
 }
 
 fn save_fps(path: &Path, fps: &Fingerprints) -> Result<()> {
-    std::fs::write(path, serde_json::to_string_pretty(fps)?)?;
-    Ok(())
+    crate::store::write_atomic(path, serde_json::to_string_pretty(fps)?)
 }
 
 pub fn run(store: &Store, cfg: &Config, only: Option<&[String]>) -> Result<SyncReport> {
@@ -100,9 +99,14 @@ pub fn run_with_adapters(
                             .unwrap_or_else(|| meta.id.clone());
                     }
                     let existed = store.find_session(&meta.source, &meta.id).is_some();
-                    store.write_session(&meta, &mut msgs, cfg).with_context(|| {
+                    if let Err(e) = store.write_session(&meta, &mut msgs, cfg).with_context(|| {
                         format!("writing session {}/{}", meta.source, meta.id)
-                    })?;
+                    }) {
+                        // one bad session must not abort the sync or lose the fingerprints
+                        eprintln!("[warn] {name}: {e:#}");
+                        errors += 1;
+                        continue;
+                    }
                     if existed {
                         updated += 1;
                     } else {

@@ -1,8 +1,8 @@
 [package]
 name = "aiyou"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2021"
-description = "Export, maintain and analyze all your AI coding-agent chat history in one git-versioned store"
+description = "Teach every AI agent who you are: extract your personality and working style from your chats into a me skill, kept current with your approval"
 license = "MIT"
 
 [dependencies]

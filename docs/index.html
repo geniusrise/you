@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>aiyou — all your AI chat history, in one git repo</title>
-<meta name="description" content="Export, maintain and analyze all your AI coding-agent chat history in one git-versioned store. Import ChatGPT, Claude and Gemini dumps. Distill your personality into a skill your agents can use.">
+<title>aiyou — teach every AI agent who you are</title>
+<meta name="description" content="aiyou extracts your personality, taste and working style from your real AI conversations, keeps it current as you change (you approve every update), and gives every agent a portable me skill.">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🫵</text></svg>">
 <style>
   :root {
@@ -124,13 +124,13 @@
 </nav>
 
 <header class="wrap">
-  <span class="pill">v0.2.0 — 16 harnesses · local-first · git-versioned</span>
-  <h1>Every AI chat you've<br>ever had, <em>in one place.</em></h1>
+  <span class="pill">v0.3.0 — personality extraction &amp; maintenance · local-first · you approve every change</span>
+  <h1>Your agents don't know you.<br><em>Teach them once.</em></h1>
   <p class="tagline">
-    aiyou harvests your Claude Code, OpenCode, Codex, Copilot, Cursor and friends into one
-    normalized, git-versioned store — imports your ChatGPT &amp; Gemini dumps — then runs an
-    LLM swarm over everything to write a <b>SKILL.md</b> that makes every agent align with
-    <i>you</i>.
+    aiyou reads how you actually talk, decide and work across every AI tool you use, distills
+    your personality, taste and habits into one <b>me</b> skill, and keeps it current as you
+    change &mdash; nothing updates until you approve it. Every agent you run then works the way
+    <i>you</i> would.
   </p>
   <div class="cta">
     <a class="btn btn-primary" href="#install">Get started</a>
@@ -138,24 +138,58 @@
   </div>
 </header>
 
+<section class="wrap">
+  <div class="codewrap"><span class="label">what it produces</span>
+<pre><span class="c"># ~/.aiyou/profile/SKILL.md  (excerpt)</span>
+<span class="p">## How to talk to me</span>
+- Wants answers under five lines unless I ask to elaborate
+- Dislikes hedging; state the recommendation first, then the why
+<span class="p">## How I like work done</span>
+- Writes the failing test first, then the implementation
+- Prefers small commits with lowercase <span class="a">feat:</span>/<span class="a">fix:</span> prefixes
+<span class="p">## What I value</span>
+- Boring, reliable tools over clever ones <span class="c">_(tentative)_</span></pre></div>
+</section>
+
 <section id="features" class="wrap">
-  <h2>One store. Zero lock-in.</h2>
-  <p class="sub">Your agents' data lives in a dozen opaque SQLite files and JSONL dumps. aiyou turns all of it into a plain, diffable git repo on your disk.</p>
+  <h2>A profile that is yours, and stays right.</h2>
+  <p class="sub">Not a chat archive. A living, evidence-backed model of how you want to be worked with &mdash; built from what you really said, not a form you filled in.</p>
   <div class="grid">
-    <div class="card"><div class="ico">🧲</div><h3>Harvest everything</h3>
-      <p>16 harness adapters — JSONL, SQLite, VS Code state dbs — all read-only, incremental and idempotent. Run it from cron; only what changed gets re-exported.</p></div>
-    <div class="card"><div class="ico">📦</div><h3>Progressive imports</h3>
-      <p>Drop in ChatGPT, Claude.ai or Gemini Takeout dumps as often as you like. Same conversations update in place — never a duplicate, every import audited in a manifest.</p></div>
-    <div class="card"><div class="ico">🐝</div><h3>Profile swarm</h3>
-      <p>A map-reduce LLM swarm distills personality, preferences, workflow and values into <code>traits.json</code> + a portable <code>SKILL.md</code>. Incremental — only new chats get analyzed.</p></div>
+    <div class="card"><div class="ico">🧬</div><h3>Extract</h3>
+      <p>A map-reduce LLM swarm reads your conversations and pulls out personality, communication style, preferences, workflow, values and goals &mdash; each with evidence quotes and a confidence score. Written as instructions an agent can act on.</p></div>
+    <div class="card"><div class="ico">✅</div><h3>You approve every change</h3>
+      <p>New runs <i>propose</i>: added, updated, retired traits, shown as a diff. <code>aiyou accept</code> what's true, <code>aiyou reject</code> what isn't &mdash; rejected traits are never proposed again. Nothing reaches your agents unreviewed.</p></div>
+    <div class="card"><div class="ico">🌱</div><h3>Maintained as you change</h3>
+      <p>Run it from cron. Only new or changed chats are analyzed. Traits you've outgrown get proposed for retirement &mdash; an absence never deletes anything. Failed batches are retried, not forgotten.</p></div>
+    <div class="card"><div class="ico">🔌</div><h3>Works with every agent</h3>
+      <p>Install the <b>me</b> skill into Claude Code, OpenCode, Codex or Crush &mdash; or inject a managed block into <code>CLAUDE.md</code>, <code>AGENTS.md</code> or <code>GEMINI.md</code> without touching your own text. Or just <code>--print</code> it.</p></div>
     <div class="card"><div class="ico">🔐</div><h3>Local-first &amp; redacted</h3>
-      <p>The store is a plain git repo — add your own remote if you want backups. API keys are redacted from exports before anything ever leaves your machine.</p></div>
+      <p>Everything lives in a plain git repo on your disk, so your profile history is diffable. Secrets are redacted before anything is sent to the LLM endpoint you choose. No daemon, no hosted anything.</p></div>
+    <div class="card"><div class="ico">🧲</div><h3>Fed by every chat you've had</h3>
+      <p>16 read-only sources &mdash; Claude Code, Codex, Cursor, Copilot, Gemini CLI and more &mdash; plus ChatGPT, Claude.ai and Gemini dumps. More chats, better portrait.</p></div>
   </div>
 </section>
 
+<section class="wrap">
+  <h2>Review, like a pull request for your personality</h2>
+  <p class="sub">Every run ends in a diff you can read. Say yes to what's true, no to what isn't.</p>
+  <div class="codewrap"><span class="label">aiyou review</span>
+<pre>3 pending change(s):
+
+  <span class="p">+ prefers-tests-first</span>  [workflow]  Writes the failing test before the implementation
+      "write the test first, then make it pass"
+  <span class="a">~ terse-answers</span>
+      was: Prefers terse answers (0.92)
+      now: Wants answers under five lines unless asked to elaborate (0.91)
+  <span class="c">- uses-vim-keybindings  Uses vim keybindings</span>
+
+aiyou accept [ids...]   apply (all if no ids)
+aiyou reject [ids...]   decline (won't be proposed again)</pre></div>
+</section>
+
 <section id="sources" class="wrap">
-  <h2>Supported harnesses</h2>
-  <p class="sub">Missing one? It's skipped quietly. Sources are plugin adapters — a trait with three methods.</p>
+  <h2>Where it learns from</h2>
+  <p class="sub">Read-only, incremental, and skipped quietly if you don't use one. Run <code>aiyou doctor</code> to see what it found.</p>
   <div class="chips">
     <span class="chip on">claude-code</span><span class="chip on">opencode</span>
     <span class="chip on">codex</span><span class="chip on">charm crush</span>
@@ -177,9 +211,9 @@ yay -S <span class="p">aiyou</span></pre></div>
   <br>
   <div class="codewrap"><span class="label">deb / rpm</span>
 <pre><span class="c"># Debian / Ubuntu</span>
-sudo dpkg -i <span class="p">aiyou_0.2.0_amd64.deb</span>
+sudo dpkg -i <span class="p">aiyou_0.3.0_amd64.deb</span>
 <span class="c"># Fedora / RHEL</span>
-sudo dnf install <span class="p">aiyou-0.2.0-1.x86_64.rpm</span></pre></div>
+sudo dnf install <span class="p">aiyou-0.3.0-1.x86_64.rpm</span></pre></div>
   <br>
   <div class="codewrap"><span class="label">source</span>
 <pre>git clone https://github.com/geniusrise/you && cd you
@@ -187,18 +221,20 @@ cargo install --path .        <span class="c"># or: cargo install --git https://
 </section>
 
 <section class="wrap">
-  <h2>Four commands to alignment</h2>
+  <h2>Five commands to an agent that knows you</h2>
   <div class="steps">
     <div class="step"><p><b>Init the store.</b><br><code>aiyou init</code> — creates <code>~/.aiyou</code>, a git repo with your config.</p></div>
-    <div class="step"><p><b>Harvest + import.</b><br><code>aiyou sync</code> pulls every local harness. <code>aiyou import chatgpt ~/dumps.zip</code> merges hosted chats, progressively.</p></div>
-    <div class="step"><p><b>Run the swarm.</b><br><code>aiyou profile</code> — any OpenAI-compatible endpoint — writes <code>traits.json</code> + <code>SKILL.md</code>, incrementally as data evolves.</p></div>
-    <div class="step"><p><b>Install the skill.</b><br><code>aiyou profile install --target claude</code> (or opencode, crush, codex). Now every agent knows you.</p></div>
+    <div class="step"><p><b>Gather your conversations.</b><br><code>aiyou sync</code> pulls every local harness. <code>aiyou import chatgpt ~/dumps.zip</code> merges hosted chats.</p></div>
+    <div class="step"><p><b>Extract.</b><br><code>aiyou profile</code> — any OpenAI-compatible endpoint — analyzes what's new and proposes changes to your profile.</p></div>
+    <div class="step"><p><b>Review.</b><br><code>aiyou review</code>, then <code>aiyou accept</code> or <code>aiyou reject</code>. Your call, every time.</p></div>
+    <div class="step"><p><b>Install.</b><br><code>aiyou install --target claude</code> (or opencode, codex, crush, <code>claude-md</code>, <code>gemini</code>, <code>agents-md</code>).</p></div>
   </div>
   <br>
   <div class="codewrap"><span class="label">cron</span>
-<pre><span class="c"># keep everything fresh (aiyou cron prints this for you)</span>
+<pre><span class="c"># keep the data fresh and queue proposals; you review when you like (aiyou cron prints this)</span>
 0 3 * * *  <span class="a">aiyou sync</span>
-0 4 * * 0  <span class="a">aiyou profile --if-changed</span></pre></div>
+0 4 * * 0  <span class="a">aiyou profile --if-changed</span>
+<span class="c"># aiyou status  ->  "pending: 3 profile change(s) — run aiyou review"</span></pre></div>
 </section>
 
 <footer class="wrap">

@@ -81,7 +81,7 @@ fn pipeline_end_to_end() {
     aiyou::profile::pipeline::run_with_client(
         &st,
         &cfg,
-        aiyou::profile::pipeline::Opts { if_changed: false },
+        aiyou::profile::pipeline::Opts { if_changed: false, yes: true },
         &client,
     )
     .unwrap();
@@ -98,8 +98,8 @@ fn pipeline_end_to_end() {
 
     // SKILL.md rendered with frontmatter
     let skill = std::fs::read_to_string(st.skill_path()).unwrap();
-    assert!(skill.starts_with("---\nname: user-persona\n"));
-    assert!(skill.contains("## Communication"));
+    assert!(skill.starts_with("---\nname: me\n"));
+    assert!(skill.contains("## How to talk to me"));
     assert!(skill.contains("Prefers terse answers"));
 
     // audit run file exists
@@ -123,10 +123,133 @@ fn pipeline_if_changed_noop() {
     let (_tmp, st, cfg) = setup();
     write_session(&st, &cfg, "s1", "hello");
     let (client, calls) = mock_client();
-    let opts = aiyou::profile::pipeline::Opts { if_changed: true };
+    let opts = aiyou::profile::pipeline::Opts { if_changed: true, yes: true };
     aiyou::profile::pipeline::run_with_client(&st, &cfg, opts.clone(), &client).unwrap();
     let after_first = calls.load(Ordering::SeqCst);
     // second run: nothing changed -> no-op, no additional LLM calls
     aiyou::profile::pipeline::run_with_client(&st, &cfg, opts, &client).unwrap();
     assert_eq!(calls.load(Ordering::SeqCst), after_first);
+}
+
+// ---------- approval flow ----------
+
+use aiyou::profile::pipeline::{run_with_client, Opts};
+use aiyou::profile::review::{self, Proposal};
+use aiyou::profile::traits::ProfileDoc;
+
+fn staged(client: &LlmClient, st: &aiyou::store::Store, cfg: &aiyou::config::Config) {
+    run_with_client(st, cfg, Opts { if_changed: false, yes: false }, client).unwrap();
+}
+
+#[test]
+fn profile_stages_changes_without_touching_live_profile() {
+    let (_tmp, st, cfg) = setup();
+    write_session(&st, &cfg, "s1", "be brief, rust is great");
+    let (client, _) = mock_client();
+    staged(&client, &st, &cfg);
+
+    assert!(!st.traits_path().exists(), "live profile must not change before approval");
+    assert!(!st.skill_path().exists());
+    let p = Proposal::load(&st).unwrap().expect("proposal staged");
+    assert_eq!(p.changes.len(), 2);
+    assert!(p.changes.iter().all(|c| c.kind == review::ChangeKind::Add));
+
+    // a second run refuses to stack another proposal on top
+    let err = run_with_client(&st, &cfg, Opts { if_changed: false, yes: false }, &client).unwrap_err();
+    assert!(err.to_string().contains("aiyou review"));
+}
+
+#[test]
+fn accept_all_applies_and_marks_chats_absorbed() {
+    let (_tmp, st, cfg) = setup();
+    write_session(&st, &cfg, "s1", "hello");
+    let (client, calls) = mock_client();
+    staged(&client, &st, &cfg);
+
+    review::resolve(&st, &[], true).unwrap();
+    let doc = ProfileDoc::load(&st.traits_path()).unwrap();
+    assert_eq!(doc.traits.len(), 2);
+    assert!(st.skill_path().exists());
+    assert!(Proposal::load(&st).unwrap().is_none());
+
+    // nothing new -> no further LLM calls
+    let before = calls.load(Ordering::SeqCst);
+    staged(&client, &st, &cfg);
+    assert_eq!(calls.load(Ordering::SeqCst), before);
+}
+
+#[test]
+fn partial_accept_keeps_the_rest_pending_and_reject_is_remembered() {
+    let (_tmp, st, cfg) = setup();
+    write_session(&st, &cfg, "s1", "hello");
+    let (client, _) = mock_client();
+    staged(&client, &st, &cfg);
+
+    review::resolve(&st, &["loves-rust".into()], true).unwrap();
+    let doc = ProfileDoc::load(&st.traits_path()).unwrap();
+    assert_eq!(doc.traits.len(), 1);
+    assert_eq!(doc.traits[0].id, "loves-rust");
+    assert_eq!(Proposal::load(&st).unwrap().unwrap().changes.len(), 1);
+
+    review::resolve(&st, &[], false).unwrap();
+    assert!(Proposal::load(&st).unwrap().is_none());
+    assert_eq!(review::load_rejected(&st), vec!["prefers-terse-answers".to_string()]);
+
+    assert!(review::resolve(&st, &[], true).is_err(), "nothing pending any more");
+}
+
+#[test]
+fn diff_keeps_unmentioned_traits_and_ignores_noise() {
+    use aiyou::profile::traits::Trait;
+    let t = |id: &str, st: &str, c: f32| Trait {
+        id: id.into(),
+        statement: st.into(),
+        category: "preferences".into(),
+        confidence: c,
+        evidence: vec![],
+        first_seen_ms: 1,
+        last_seen_ms: 1,
+    };
+    let existing = vec![t("a", "A", 0.8), t("b", "B", 0.8), t("c", "C", 0.8)];
+    // a: tiny confidence wobble (noise); b: reworded (update); d: new but previously rejected
+    let merged = vec![t("a", "A", 0.85), t("b", "B2", 0.8), t("d", "D", 0.9)];
+    let changes = review::diff(&existing, merged, &["c".into()], &["d".into()]);
+    let kinds: Vec<_> = changes.iter().map(|c| (c.id.as_str(), c.kind)).collect();
+    assert_eq!(kinds, vec![("b", review::ChangeKind::Update), ("c", review::ChangeKind::Retire)]);
+
+    // applying: b updated, c removed, a untouched even though the reducer never "retained" c
+    let mut doc = ProfileDoc { updated_at_ms: 0, traits: existing };
+    review::apply(&mut doc, &changes, 5);
+    let ids: Vec<_> = doc.traits.iter().map(|t| t.id.as_str()).collect();
+    assert!(ids.contains(&"a") && ids.contains(&"b") && !ids.contains(&"c"));
+    assert_eq!(doc.traits.iter().find(|t| t.id == "b").unwrap().statement, "B2");
+}
+
+#[test]
+fn failed_batches_are_retried_not_forgotten() {
+    // LLM that fails every map call with a non-JSON body
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    let (tx, rx) = std::sync::mpsc::channel::<String>();
+    std::thread::spawn(move || {
+        rt.block_on(async move {
+            let app = axum::Router::new().route(
+                "/v1/chat/completions",
+                post(|| async { axum::Json(serde_json::json!({"choices":[{"message":{"content":"sorry, no"}}]})) }),
+            );
+            let l = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+            let _ = tx.send(format!("http://{}/v1", l.local_addr().unwrap()));
+            axum::serve(l, app).await.unwrap();
+        });
+    });
+    let bad = LlmClient::new(rx.recv().unwrap(), "k".into(), "m".into());
+
+    let (_tmp, st, cfg) = setup();
+    write_session(&st, &cfg, "s1", "hello");
+    assert!(run_with_client(&st, &cfg, Opts { if_changed: false, yes: true }, &bad).is_err());
+
+    // chat was NOT marked absorbed, so a healthy run picks it up
+    let (good, calls) = mock_client();
+    run_with_client(&st, &cfg, Opts { if_changed: false, yes: true }, &good).unwrap();
+    assert!(calls.load(Ordering::SeqCst) >= 2);
+    assert_eq!(ProfileDoc::load(&st.traits_path()).unwrap().traits.len(), 2);
 }

@@ -6,7 +6,7 @@ Roadmap and feature-addition strategy for **aiyou**. If you are an agent picking
 
 ## Product thesis (the one thing we do)
 
-**Extract data from past user interactions to know the user better, to serve them better.**
+**Extract data from past user interactions to know the user better, to serve them better.** Public positioning: *teach every agent who you are* — personality extraction and maintenance, with the user approving every change. Chat harvesting is the input pipeline, not the headline.
 
 aiyou turns scattered AI chat history into one normalized store, and distills it into a portable profile (`SKILL.md`) that every agent the user runs can consume. Nothing near-term may expand beyond this thesis.
 
@@ -44,16 +44,17 @@ Each is a candidate adapter following the recipe in `AGENTS-MAINTENANCE.md` (rec
 
 The skill currently installs to claude, opencode, crush, codex, `--agents-dir`. Add:
 
-- `AGENTS.md` / `CLAUDE.md` injection (append a managed `<!-- aiyou:begin -->…<!-- aiyou:end -->` block — idempotent, never clobber user text)
-- Gemini CLI `GEMINI.md` context
+- ~~`AGENTS.md` / `CLAUDE.md` injection~~ — **done in 0.3** (`aiyou install --target claude-md|gemini|codex-md|agents-md`, `--file`)
+- ~~Gemini CLI `GEMINI.md` context~~ — done in 0.3
 - goose, amp, continue, zed rule/context files
 - Cursor rules (`.cursor/rules`)
-- A plain `--print` of the skill to stdout for piping anywhere
+- ~~A plain `--print` of the skill~~ — done in 0.3
 
 ### D. Core hardening (compatibility promises)
 
 - **Store format versioning**: version the `.jsonl` session header (`"fmt": 1`) and the fingerprints cache; migrations for future changes. Goal: **version updates never break the store** — this is the gate to 1.0.
-- `aiyou doctor` — per-source discovery report (found / empty / error / skipped, plus resolved paths) so "why is source X empty" is one command.
+- `aiyou doctor` — **shipped in 0.3** (per-source found/empty/error, git, LLM key, pending proposal). Still open: show the resolved paths per source (needs an `Adapter::location()`).
+- Done in 0.3: approval flow (propose → review → accept/reject), content-hash incrementality, failed-batch retry, atomic store writes, sync survives a bad session.
 - Profile quality: redaction coverage tests, incremental correctness (only changed chats re-mapped), evidence quotes spot-checked.
 - Stability: sync idempotency tests on every adapter; adapters must degrade gracefully.
 

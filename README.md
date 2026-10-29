@@ -2,9 +2,15 @@
 
 **https://geniusrise.github.io/you**
 
-Export, maintain and analyze **all** your AI coding-agent chat history — Claude Code, OpenCode, Codex, Charm Crush, Gemini CLI, Pi — in one normalized, **git-versioned store** on disk. Import your ChatGPT / Claude.ai / Gemini dumps alongside them. Then run an LLM **swarm** over everything to distill your personality, preferences and workflow into a portable `SKILL.md` your agents can use to align with you.
+**Teach every AI agent who you are.**
 
-Local-first: the store is a plain git repo under `~/.aiyou`. No daemon, no server, no network — except when *you* run `aiyou profile`.
+aiyou reads your real conversations — Claude Code, OpenCode, Codex, Cursor, Copilot, Gemini CLI and more, plus ChatGPT / Claude.ai / Gemini dumps — and extracts your personality, taste and working style into a portable **`me` skill**. It keeps that profile current as you change, and **nothing updates until you approve it**. Every agent you run then talks to you, and does the work, the way you would.
+
+```
+chats ──► extract (LLM swarm) ──► proposed changes ──► you review ──► `me` skill ──► every agent
+```
+
+Local-first: the store is a plain git repo under `~/.aiyou`, so your profile history is diffable. No daemon, no server, no network — except when *you* run `aiyou profile`.
 
 ## Install
 
@@ -13,10 +19,10 @@ Local-first: the store is a plain git repo under `~/.aiyou`. No daemon, no serve
 yay -S aiyou
 
 # Debian / Ubuntu
-sudo dpkg -i aiyou_0.2.0_amd64.deb   # from GitHub releases
+sudo dpkg -i aiyou_0.3.0_amd64.deb   # from GitHub releases
 
 # Fedora / RHEL
-sudo dnf install aiyou-0.2.0-1.x86_64.rpm
+sudo dnf install aiyou-0.3.0-1.x86_64.rpm
 
 # From source
 cargo install --git https://github.com/geniusrise/you
@@ -35,17 +41,24 @@ aiyou import chatgpt   ~/Downloads/chatgpt-export.zip
 aiyou import claude-ai ~/Downloads/claude-export/conversations.json
 aiyou import gemini    ~/Downloads/takeout/MyChat.json
 
-# run the swarm: map-reduce over all chats -> profile/traits.json + profile/SKILL.md
+# extract: map-reduce over new chats -> a *proposal*, not a change
 export OPENAI_API_KEY=...          # or any OpenAI-compatible provider, see below
 aiyou profile
+aiyou review                       # see exactly what would change
+aiyou accept                       # or: aiyou accept <id>... / aiyou reject [<id>...]
 
-# install the generated skill into a harness
-aiyou profile install --target claude      # or opencode | crush | codex, or --agents-dir <path>
+# put your `me` skill to work
+aiyou install --target claude      # skill dir: claude | opencode | crush | codex
+aiyou install --target claude-md   # managed block: claude-md | gemini | codex-md | agents-md
+aiyou install --file ./AGENTS.md   # any context file (your own text is never touched)
+aiyou install --print              # or pipe it anywhere
+
+aiyou doctor                       # what was found, is the LLM key set, anything pending
 ```
 
-## Keep it updated (cron)
+## Keep it current (cron)
 
-`aiyou sync` is incremental and idempotent — safe to run as often as you like. Print ready-made crontab lines:
+`aiyou sync` is incremental and idempotent. `aiyou profile --if-changed` only analyzes new or changed chats and **stages** its proposal; `aiyou status` tells you when something is waiting. Print ready-made crontab lines:
 
 ```bash
 aiyou cron
@@ -64,7 +77,10 @@ Add a git remote in `~/.aiyou` yourself if you want off-machine backups — aiyo
   imports/manifest.json          # every dump ever imported (hash, date, counts)
   profile/
     traits.json                  # canonical machine-readable trait profile
-    SKILL.md                     # generated skill for your agents
+    SKILL.md                     # your `me` skill, rendered from the accepted traits
+    proposal.json                # pending changes awaiting `aiyou accept` / `reject`
+    state.json                   # content hashes of chats already absorbed
+    rejected.json                # trait ids you declined (never re-proposed)
     runs/<ts>.json               # audit trail of each profile run
 ```
 
@@ -80,9 +96,13 @@ Add a git remote in `~/.aiyou` yourself if you want off-machine backups — aiyo
 
 Missing a source (e.g. you don't use Codex)? It's skipped with no errors. Paths are overridable in `aiyou.toml`.
 
-## The profile swarm
+## How extraction and maintenance work
 
-`aiyou profile` shards your chats into batches (~120k chars each) and runs N concurrent workers (configurable) that extract grounded trait candidates (personality, communication, preferences, workflow, tech-stack, values, goals — each with evidence quotes and confidence). A reduce pass merges candidates with your existing `traits.json` into a canonical profile. Re-runs are **incremental**: only chats changed since the last run are mapped.
+`aiyou profile` shards your chats into batches (~120k chars each) and runs N concurrent workers that extract grounded trait candidates (personality, communication, preferences, workflow, tech-stack, values, goals — each with evidence quotes and confidence). A reduce pass merges them with your existing profile, and a deterministic diff turns the result into **proposed changes**: `+` add, `~` update, `-` retire.
+
+- **You decide.** Changes wait in `profile/proposal.json` until `aiyou accept` (all or by id) or `aiyou reject`. Rejected traits are remembered and never proposed again. Prefer autopilot? `aiyou profile --yes` or `auto_accept = true`.
+- **Nothing is lost by accident.** Traits the model doesn't mention are kept; only traits it explicitly retires (contradicted by newer evidence) are proposed for removal, and you approve that too.
+- **Incremental by content.** A chat is re-analyzed only when its content hash changed. A failed batch leaves its chats unmarked, so they're retried next run.
 
 Any OpenAI-compatible endpoint works:
 
@@ -98,7 +118,7 @@ exclude_sources   = []   # e.g. ["chatgpt"] to leave imports out
 
 Point `provider_base_url` at OpenRouter, a local vLLM, or an Anthropic-compat proxy — anything speaking `/chat/completions` with `response_format: json_object`.
 
-Every run writes an audit record (`profile/runs/`) and a git commit, so profile history is versioned too.
+Every run writes an audit record (`profile/runs/`), and every accept/reject is a git commit, so your profile's history is versioned too.
 
 ## Privacy
 

@@ -52,6 +52,9 @@ pub struct ProfileCfg {
     pub map_context_chars: usize,
     #[serde(default)]
     pub exclude_sources: Vec<String>,
+    /// Apply proposed profile changes without asking (default: stage for `aiyou review`).
+    #[serde(default)]
+    pub auto_accept: bool,
 }
 
 impl Default for ProfileCfg {
@@ -63,6 +66,7 @@ impl Default for ProfileCfg {
             workers: 4,
             map_context_chars: 120_000,
             exclude_sources: vec![],
+            auto_accept: false,
         }
     }
 }

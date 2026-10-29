@@ -13,6 +13,17 @@ pub fn default_root() -> PathBuf {
     PathBuf::from(home).join(".aiyou")
 }
 
+/// Write via a temp file + rename so a crash never leaves a truncated file.
+pub fn write_atomic(path: &Path, contents: impl AsRef<[u8]>) -> Result<()> {
+    let tmp = path.with_extension(format!(
+        "{}.tmp",
+        path.extension().and_then(|e| e.to_str()).unwrap_or("")
+    ));
+    std::fs::write(&tmp, contents).with_context(|| format!("writing {}", tmp.display()))?;
+    std::fs::rename(&tmp, path).with_context(|| format!("replacing {}", path.display()))?;
+    Ok(())
+}
+
 impl Store {
     pub fn open(root: &Path) -> Result<Self> {
         Ok(Self { root: root.to_path_buf() })
@@ -63,6 +74,21 @@ impl Store {
         self.profile_dir().join("SKILL.md")
     }
 
+    /// Pending, not-yet-approved profile changes.
+    pub fn proposal_path(&self) -> PathBuf {
+        self.profile_dir().join("proposal.json")
+    }
+
+    /// Which chat contents the profile has already absorbed.
+    pub fn state_path(&self) -> PathBuf {
+        self.profile_dir().join("state.json")
+    }
+
+    /// Trait ids the user declined, so they are not proposed again.
+    pub fn rejected_path(&self) -> PathBuf {
+        self.profile_dir().join("rejected.json")
+    }
+
     pub fn session_path(&self, source: &str, id: &str, ext: &str) -> PathBuf {
         self.chats_dir().join(source).join(format!("{id}.{ext}"))
     }
@@ -101,7 +127,7 @@ impl Store {
             jsonl.push_str(&serde_json::to_string(m)?);
             jsonl.push('\n');
         }
-        std::fs::write(&jsonl_path, jsonl)?;
+        write_atomic(&jsonl_path, jsonl)?;
 
         let md = if cfg.redact_markdown {
             let redacted: Vec<crate::model::Msg> = msgs
@@ -112,7 +138,7 @@ impl Store {
         } else {
             crate::render::render_markdown(meta, msgs)
         };
-        std::fs::write(&md_path, md)?;
+        write_atomic(&md_path, md)?;
         Ok(())
     }
 

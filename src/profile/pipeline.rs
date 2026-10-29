@@ -1,14 +1,19 @@
 use super::client::LlmClient;
-use super::traits::{batch_chats, select_chats, ChatRef, Evidence, ProfileDoc, Trait};
+use super::review::{self, Proposal, State};
+use super::traits::{batch_chats, select_chats, ChatRef, Evidence, Trait};
 use crate::config::Config;
 use crate::store::Store;
 use anyhow::{Context, Result};
 use serde::Serialize;
+use sha2::{Digest, Sha256};
+use std::collections::BTreeMap;
 use std::sync::Arc;
 
 #[derive(Clone)]
 pub struct Opts {
     pub if_changed: bool,
+    /// Apply the proposal immediately instead of staging it for review.
+    pub yes: bool,
 }
 
 #[derive(Serialize)]
@@ -17,59 +22,71 @@ struct RunAudit {
     batches: usize,
     sessions_covered: usize,
     sessions_total: usize,
-    traits: usize,
+    changes: usize,
     failed_batches: Vec<String>,
     full_run: bool,
 }
 
-pub const MAP_SYSTEM: &str = "You extract user traits from coding/chat transcripts. Return strict JSON {\"traits\":[{\"trait\":\"...\",\"category\":\"one of personality|communication|preferences|workflow|tech-stack|values|goals\",\"evidence\":\"quote\",\"confidence\":0.0-1.0}]} about the HUMAN user only, never the assistant. Be specific and grounded in the transcript; prefer fewer, well-supported traits over many vague ones.";
+pub const MAP_SYSTEM: &str = "You extract user traits from coding/chat transcripts. Return strict JSON {\"traits\":[{\"trait\":\"...\",\"category\":\"one of personality|communication|preferences|workflow|tech-stack|values|goals\",\"evidence\":\"quote\",\"confidence\":0.0-1.0}]} about the HUMAN user only, never the assistant. Be specific and grounded in the transcript; prefer fewer, well-supported traits over many vague ones. Write each trait as an instruction an assistant could act on (e.g. \"Wants answers under five lines unless asked to elaborate\"), not as a label.";
 
-pub const REDUCE_SYSTEM: &str = "You merge candidate user traits and an existing profile into one canonical profile. Return strict JSON {\"traits\":[{\"id\":\"slug-of-statement\",\"trait\":\"...\",\"category\":\"one of personality|communication|preferences|workflow|tech-stack|values|goals\",\"confidence\":0.0-1.0,\"evidence\":[{\"source\":\"...\",\"session\":\"...\",\"quote\":\"...\"}]}]}. Rules: merge duplicates keeping the clearest statement (preserve the existing id when the statement is essentially the same); combine their evidence (max 5 each, no invented evidence); confidence = your merged judgment. Only traits about the HUMAN user.";
+pub const REDUCE_SYSTEM: &str = "You merge candidate user traits and an existing profile into one canonical profile. Return strict JSON {\"traits\":[{\"id\":\"slug-of-statement\",\"trait\":\"...\",\"category\":\"one of personality|communication|preferences|workflow|tech-stack|values|goals\",\"confidence\":0.0-1.0,\"evidence\":[{\"source\":\"...\",\"session\":\"...\",\"quote\":\"...\"}]}],\"retired\":[\"id\"]}. Rules: merge duplicates keeping the clearest statement (preserve the existing id when the statement is essentially the same); combine their evidence (max 5 each, no invented evidence); confidence = your merged judgment. Only traits about the HUMAN user. Do not repeat existing traits that are unchanged. List in \"retired\" the ids of existing traits that newer evidence clearly contradicts or that the user has outgrown; never retire on mere absence. Never re-propose anything listed in rejected_ids.";
+
+fn hash_file(path: &std::path::Path) -> String {
+    let bytes = std::fs::read(path).unwrap_or_default();
+    hex::encode(Sha256::digest(&bytes))
+}
+
+fn key(c: &ChatRef) -> String {
+    format!("{}/{}", c.meta.source, c.meta.id)
+}
 
 pub fn run(store: &Store, cfg: &Config, opts: Opts) -> Result<()> {
+    if opts.if_changed && review::Proposal::load(store)?.is_some() {
+        println!("profile: a proposal is already waiting — run `aiyou review`");
+        return Ok(());
+    }
     let client = LlmClient::from_config(&cfg.profile, None)?;
     run_with_client(store, cfg, opts, &client)
 }
 
 pub fn run_with_client(store: &Store, cfg: &Config, opts: Opts, client: &LlmClient) -> Result<()> {
-    let now = chrono::Utc::now().timestamp_millis();
-    let traits_path = store.traits_path();
-    let existing = if traits_path.exists() {
-        ProfileDoc::load(&traits_path).ok().unwrap_or_default()
-    } else {
-        ProfileDoc::default()
-    };
-    let last_epoch = existing.updated_at_ms;
-
-    let all = select_chats(store, &cfg.profile.exclude_sources)?;
-    // incremental: only chats whose md mtime > last profile run
-    let (fresh, full_run): (Vec<ChatRef>, bool) = if last_epoch == 0 {
-        (all.clone(), true)
-    } else {
-        let fresh: Vec<ChatRef> = all
-            .clone()
-            .into_iter()
-            .filter(|c| {
-                c.path
-                    .metadata()
-                    .ok()
-                    .and_then(|m| m.modified().ok())
-                    .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-                    .map(|d| d.as_millis() as i64)
-                    .unwrap_or(0)
-                    > last_epoch
-            })
-            .collect();
-        let f = fresh.clone();
-        (f, false)
-    };
-
-    if fresh.is_empty() {
+    if let Some(p) = Proposal::load(store)? {
         if opts.if_changed {
-            println!("profile: no changes since last run");
+            println!("profile: a proposal is already waiting — run `aiyou review`");
             return Ok(());
         }
-        println!("profile: no chats to analyze (nothing changed since last run; use a fresh store or touch chats)");
+        anyhow::bail!(
+            "{} change(s) are waiting for your decision — run `aiyou review`, then `aiyou accept` or `aiyou reject`",
+            p.changes.len()
+        );
+    }
+    let now = chrono::Utc::now().timestamp_millis();
+    let existing = if store.traits_path().exists() {
+        super::traits::ProfileDoc::load(&store.traits_path()).ok().unwrap_or_default()
+    } else {
+        super::traits::ProfileDoc::default()
+    };
+    let state = State::load(store);
+    let rejected = review::load_rejected(store);
+
+    // incremental: a chat is fresh when its content differs from what the
+    // profile last absorbed (robust against mtime churn from re-syncs)
+    let all = select_chats(store, &cfg.profile.exclude_sources)?;
+    let mut hashes: BTreeMap<String, String> = BTreeMap::new();
+    let fresh: Vec<ChatRef> = all
+        .iter()
+        .filter(|c| {
+            let h = hash_file(&c.path);
+            let changed = state.processed.get(&key(c)) != Some(&h);
+            hashes.insert(key(c), h);
+            changed
+        })
+        .cloned()
+        .collect();
+    let full_run = state.processed.is_empty();
+
+    if fresh.is_empty() {
+        println!("profile: no changes since last run");
         return Ok(());
     }
 
@@ -89,6 +106,7 @@ pub fn run_with_client(store: &Store, cfg: &Config, opts: Opts, client: &LlmClie
 
     let mut failed_batches: Vec<String> = Vec::new();
     let mut candidates: Vec<serde_json::Value> = Vec::new();
+    let mut covered: Vec<String> = Vec::new();
 
     runtime.block_on(async {
         let mut jobs = Vec::new();
@@ -97,8 +115,8 @@ pub fn run_with_client(store: &Store, cfg: &Config, opts: Opts, client: &LlmClie
             let client = client.clone();
             jobs.push(tokio::spawn(async move {
                 let _permit = permit_sem.acquire_owned().await?;
-                type MapTexts = Result<(usize, String, Vec<(String, String)>)>;
-                let texts = tokio::task::spawn_blocking(move || -> MapTexts {
+                type MapTexts = Result<(String, Vec<(String, String)>)>;
+                let (combined, refs) = tokio::task::spawn_blocking(move || -> MapTexts {
                     let mut combined = String::new();
                     let mut refs = Vec::new();
                     for c in &batch {
@@ -109,27 +127,23 @@ pub fn run_with_client(store: &Store, cfg: &Config, opts: Opts, client: &LlmClie
                         combined.push_str(&body);
                         refs.push((c.meta.source.clone(), c.meta.id.clone()));
                     }
-                    Ok((i, combined, refs))
+                    Ok((combined, refs))
                 })
                 .await??;
-                let (i, combined, refs) = texts;
                 let out = client.chat(MAP_SYSTEM, &combined).await?;
                 Ok::<_, anyhow::Error>((i, out, refs))
             }));
         }
         for job in jobs {
             match job.await {
-                Ok(Ok((i, out, refs))) => {
-                    match LlmClient::salvage_json(&out) {
-                        Ok(v) => {
-                            // attach session refs to evidence so the reducer can cite
-                            let v = attach_refs(v, &refs);
-                            candidates.push(v);
-                        }
-                        Err(e) => failed_batches.push(format!("batch {i}: {e}")),
+                Ok(Ok((i, out, refs))) => match LlmClient::salvage_json(&out) {
+                    Ok(v) => {
+                        candidates.push(attach_refs(v, &refs));
+                        covered.extend(refs.iter().map(|(s, id)| format!("{s}/{id}")));
                     }
-                }
-                Ok(Err(e)) => failed_batches.push(format!("batch: {e}")),
+                    Err(e) => failed_batches.push(format!("batch {i}: {e}")),
+                },
+                Ok(Err(e)) => failed_batches.push(format!("batch: {e:#}")),
                 Err(e) => failed_batches.push(format!("join: {e}")),
             }
         }
@@ -144,13 +158,69 @@ pub fn run_with_client(store: &Store, cfg: &Config, opts: Opts, client: &LlmClie
     if !existing.traits.is_empty() {
         reduce_input["existing_profile"] = serde_json::to_value(&existing.traits)?;
     }
-    let reduce_out = client.chat_blocking(
-        REDUCE_SYSTEM,
-        &serde_json::to_string_pretty(&reduce_input)?,
-    )?;
+    if !rejected.is_empty() {
+        reduce_input["rejected_ids"] = serde_json::to_value(&rejected)?;
+    }
+    let reduce_out = runtime.block_on(client.chat(REDUCE_SYSTEM, &serde_json::to_string_pretty(&reduce_input)?))?;
     let merged = LlmClient::salvage_json(&reduce_out)?;
-    let now_traits: Vec<Trait> = merged["traits"]
+    let merged_traits = parse_traits(&merged["traits"], now);
+    let retired: Vec<String> = merged["retired"]
         .as_array()
+        .map(|a| a.iter().filter_map(|v| v.as_str().map(String::from)).collect())
+        .unwrap_or_default();
+
+    let changes = review::diff(&existing.traits, merged_traits, &retired, &rejected);
+
+    // only chats from batches that succeeded are marked absorbed — failed
+    // batches are retried on the next run instead of silently skipped
+    let processed: BTreeMap<String, String> = covered
+        .iter()
+        .filter_map(|k| hashes.get(k).map(|h| (k.clone(), h.clone())))
+        .collect();
+
+    let audit = RunAudit {
+        ran_at_ms: now,
+        batches: candidates.len() + failed_batches.len(),
+        sessions_covered: covered.len(),
+        sessions_total: all.len(),
+        changes: changes.len(),
+        failed_batches: failed_batches.clone(),
+        full_run,
+    };
+    std::fs::create_dir_all(store.runs_dir())?;
+    crate::store::write_atomic(
+        &store.runs_dir().join(format!("{now}.json")),
+        serde_json::to_string_pretty(&audit)?,
+    )?;
+
+    if !failed_batches.is_empty() {
+        eprintln!("[warn] {} batches failed; those chats will be retried next run", failed_batches.len());
+    }
+
+    if changes.is_empty() {
+        let mut st = state;
+        st.processed.extend(processed);
+        st.save(store)?;
+        crate::git::git_commit_all(&store.root, "profile: analyzed, no changes")?;
+        println!("profile: analyzed {} sessions, your profile is already up to date", covered.len());
+        return Ok(());
+    }
+
+    let proposal = Proposal { created_ms: now, changes, processed, failed_batches };
+    proposal.save(store)?;
+    println!("profile: {} proposed change(s) from {} sessions", proposal.changes.len(), covered.len());
+
+    if opts.yes || cfg.profile.auto_accept {
+        let (n, _) = review::resolve(store, &[], true)?;
+        println!("profile: {n} change(s) applied -> {}", store.skill_path().display());
+    } else {
+        review::review(store)?;
+    }
+    Ok(())
+}
+
+fn parse_traits(raw: &serde_json::Value, now: i64) -> Vec<Trait> {
+    raw.as_array()
         .cloned()
         .unwrap_or_default()
         .iter()
@@ -168,19 +238,12 @@ pub fn run_with_client(store: &Store, cfg: &Config, opts: Opts, client: &LlmClie
                 .map(|evs| {
                     evs.iter()
                         .filter_map(|ev| {
-                            if let Some(quote) = ev["quote"].as_str() {
-                                Some(Evidence {
-                                    source: ev["source"].as_str().unwrap_or("unknown").to_string(),
-                                    session: ev["session"].as_str().unwrap_or("").to_string(),
-                                    quote: quote.chars().take(200).collect(),
-                                })
-                            } else {
-                                ev["evidence"].as_str().map(|q| Evidence {
-                                    source: "unknown".into(),
-                                    session: String::new(),
-                                    quote: q.chars().take(200).collect(),
-                                })
-                            }
+                            let quote = ev["quote"].as_str().or_else(|| ev["evidence"].as_str())?;
+                            Some(Evidence {
+                                source: ev["source"].as_str().unwrap_or("unknown").to_string(),
+                                session: ev["session"].as_str().unwrap_or("").to_string(),
+                                quote: quote.chars().take(200).collect(),
+                            })
                         })
                         .take(5)
                         .collect()
@@ -193,54 +256,13 @@ pub fn run_with_client(store: &Store, cfg: &Config, opts: Opts, client: &LlmClie
                     .unwrap_or_else(|| super::traits::trait_id(&statement)),
                 statement,
                 category,
-                confidence: t["confidence"].as_f64().unwrap_or(0.5) as f32,
+                confidence: t["confidence"].as_f64().unwrap_or(0.5).clamp(0.0, 1.0) as f32,
                 evidence,
                 first_seen_ms: now,
                 last_seen_ms: now,
             })
         })
-        .collect();
-
-    let mut doc = ProfileDoc { updated_at_ms: now, traits: now_traits };
-    // carry over first_seen from previous profile for matching ids
-    for t in doc.traits.iter_mut() {
-        if let Some(prev) = existing.traits.iter().find(|p| p.id == t.id) {
-            t.first_seen_ms = prev.first_seen_ms;
-        }
-    }
-    doc.normalize(now);
-    doc.save(&traits_path)?;
-
-    // render skill in the same run/commit
-    let skill = super::render_skill::render(&doc);
-    std::fs::create_dir_all(store.profile_dir())?;
-    std::fs::write(store.skill_path(), skill)?;
-
-    // audit trail
-    let audit = RunAudit {
-        ran_at_ms: now,
-        batches: candidates.len() + failed_batches.len(),
-        sessions_covered: count_covered(&candidates),
-        sessions_total: all.len(),
-        traits: doc.traits.len(),
-        failed_batches: failed_batches.clone(),
-        full_run,
-    };
-    std::fs::create_dir_all(store.runs_dir())?;
-    std::fs::write(
-        store.runs_dir().join(format!("{now}.json")),
-        serde_json::to_string_pretty(&audit)?,
-    )?;
-
-    crate::git::git_commit_all(
-        &store.root,
-        &format!("profile: {} traits from {} sessions", doc.traits.len(), audit.sessions_covered),
-    )?;
-    println!("profile: {} traits written to {}", doc.traits.len(), traits_path.display());
-    if !failed_batches.is_empty() {
-        eprintln!("[warn] {} batches failed and were skipped", failed_batches.len());
-    }
-    Ok(())
+        .collect()
 }
 
 fn attach_refs(mut v: serde_json::Value, refs: &[(String, String)]) -> serde_json::Value {
@@ -255,11 +277,3 @@ fn attach_refs(mut v: serde_json::Value, refs: &[(String, String)]) -> serde_jso
     }
     v
 }
-
-fn count_covered(candidates: &[serde_json::Value]) -> usize {
-    candidates
-        .iter()
-        .filter_map(|c| c["traits"].as_array().map(|a| a.len()))
-        .sum()
-}
-

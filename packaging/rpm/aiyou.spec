@@ -3,7 +3,7 @@
 Name:           aiyou
 Version:        REPLACE_VERSION
 Release:        1%{?dist}
-Summary:        Export, maintain and analyze all your AI coding-agent chat history
+Summary:        Teach every AI agent who you are: your personality and working style, extracted from your chats
 License:        MIT
 URL:            https://github.com/geniusrise/you
 Source0:        aiyou-binary.tar.gz
@@ -12,12 +12,12 @@ AutoReqProv:    no
 Requires:       git
 
 %description
-Export, maintain and analyze all your AI coding-agent chat history — Claude
-Code, OpenCode, Codex, Charm Crush, Gemini CLI, Pi, Antigravity, Goose,
-Copilot, Cursor, Amp, Continue, Zed and more — in one normalized,
-git-versioned store on disk. Import ChatGPT, Claude.ai and Gemini dumps
-alongside them, then run an LLM swarm over everything to distill your
-personality, preferences and workflow into a portable SKILL.md.
+aiyou reads your real conversations across Claude Code, OpenCode, Codex,
+Cursor, Copilot, Gemini CLI and more (plus ChatGPT, Claude.ai and Gemini
+dumps), extracts your personality, taste and working style into a portable
+'me' skill, and keeps it current as you change. Every update is proposed
+first; nothing is applied until you review and accept it. Local-first, in a
+git-versioned store.
 
 %prep
 %setup -q -n aiyou-binary
